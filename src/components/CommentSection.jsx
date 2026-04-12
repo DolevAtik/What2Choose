@@ -71,9 +71,9 @@ export default function CommentSection({ postId, onCountChange }) {
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="bg-gray-50 rounded-2xl rounded-tl-sm px-3 py-2">
-                    <span className="text-xs font-semibold text-gray-700 block mb-0.5">{name}</span>
-                    <p className="text-sm text-gray-800 leading-snug">{c.content}</p>
+                  <div className="bg-white/5 backdrop-blur-sm rounded-2xl rounded-tl-sm px-3 py-2 border border-white/5">
+                    <span className="text-xs font-semibold text-primary-400 block mb-0.5">{name}</span>
+                    <p className="text-sm text-gray-100 leading-snug">{c.content}</p>
                   </div>
                   <p className="text-xs text-gray-400 mt-1 ml-1">
                     {new Date(c.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -97,13 +97,13 @@ export default function CommentSection({ postId, onCountChange }) {
               </span>
             )}
           </div>
-          <div className="flex-1 flex items-center bg-gray-50 rounded-full border border-gray-200 pr-1 focus-within:ring-2 focus-within:ring-primary-300 focus-within:border-transparent transition-all">
+          <div className="flex-1 flex items-center bg-white/5 rounded-full border border-white/10 pr-1 focus-within:ring-2 focus-within:ring-primary-500/50 focus-within:border-primary-500/50 transition-all">
             <input
               type="text"
               placeholder="Add a comment…"
               value={text}
               onChange={(e) => setText(e.target.value)}
-              className="flex-1 bg-transparent text-sm px-4 py-2.5 outline-none placeholder-gray-400"
+              className="flex-1 bg-transparent text-sm text-white px-4 py-2.5 outline-none placeholder-gray-500"
               maxLength={500}
             />
             <button
