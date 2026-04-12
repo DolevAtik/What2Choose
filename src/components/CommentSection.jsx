@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Send } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { useAuth } from '../contexts/AuthContext'
+import { useAuth } from '../hooks/useAuth'
 
 export default function CommentSection({ postId, onCountChange }) {
   const { user, profile } = useAuth()

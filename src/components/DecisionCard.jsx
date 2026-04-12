@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { MessageCircle, Share2, Heart, ChevronDown, ChevronUp, CheckCircle } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { useAuth } from '../contexts/AuthContext'
+import { useAuth } from '../hooks/useAuth'
 import CommentSection from './CommentSection'
 
 const CATEGORY_COLORS = {

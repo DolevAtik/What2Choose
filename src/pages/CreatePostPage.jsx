@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, Send, Lightbulb } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { useAuth } from '../contexts/AuthContext'
+import { useAuth } from '../hooks/useAuth'
 import ImageUpload from '../components/ImageUpload'
 
 const CATEGORIES = ['Fashion', 'Food', 'Shopping', 'Travel']

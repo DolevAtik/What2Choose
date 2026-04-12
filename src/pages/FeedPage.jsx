@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { Sparkles, SlidersHorizontal } from 'lucide-react'
+import { useAuth } from '../hooks/useAuth'
 import { supabase } from '../lib/supabase'
 import DecisionCard from '../components/DecisionCard'
 
