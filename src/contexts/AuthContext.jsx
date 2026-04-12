@@ -24,7 +24,32 @@ export function AuthProvider({ children }) {
         setUser(currentUser)
         
         if (currentUser) {
-          await fetchProfile(currentUser.id)
+          // Check if profile exists, if not create one (crucial for Social Logins)
+          const { data: existingProfile } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', currentUser.id)
+            .single()
+
+          if (!existingProfile) {
+            console.log('No profile found, creating one for social/new user...')
+            const username = currentUser.user_metadata?.full_name || currentUser.user_metadata?.name || currentUser.email?.split('@')[0]
+            const { data: newProfile, error: createError } = await supabase
+              .from('profiles')
+              .upsert({ 
+                id: currentUser.id, 
+                username: username || 'User',
+                avatar_url: currentUser.user_metadata?.avatar_url || null
+              })
+              .select()
+              .single()
+            
+            if (createError) console.error('Failed to create initial profile:', createError)
+            setProfile(newProfile)
+          } else {
+            setProfile(existingProfile)
+          }
+          setLoading(false)
         } else {
           setProfile(null)
           setLoading(false)
