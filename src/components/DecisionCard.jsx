@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { MessageCircle, Share2, Heart, ChevronDown, ChevronUp, CheckCircle } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
+import confetti from 'canvas-confetti'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import CommentSection from './CommentSection'
@@ -80,6 +82,14 @@ export default function DecisionCard({ post }) {
         return
       }
 
+      // CELEBRATION!
+      confetti({
+        particleCount: 100,
+        spread: 70,
+        origin: { y: 0.6 },
+        colors: ['#8b5cf6', '#ec4899', '#3b82f6'],
+      })
+
       setUserVote(choice)
       setVotes((prev) => ({ ...prev, [choice]: prev[choice] + 1 }))
       setTimeout(() => setShowResult(true), 100)
@@ -104,8 +114,12 @@ export default function DecisionCard({ post }) {
   const avatarUrl = post.profiles?.avatar_url
 
   return (
-    <article className="glass-card transition-all duration-300 hover:shadow-[0_0_40px_rgba(139,92,246,0.15)] group animate-fade-up">
-
+    <motion.article 
+      layout
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      className="glass-card group"
+    >
       {/* Header */}
       <div className="flex items-center gap-3 p-4 pb-3 border-b border-white/5">
         <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-primary-600 to-accent-600 flex items-center justify-center overflow-hidden shrink-0 shadow-neon-primary relative">
@@ -143,24 +157,24 @@ export default function DecisionCard({ post }) {
           const isOther = userVote && userVote !== option
 
           return (
-            <button
+            <motion.button
               key={option}
+              whileTap={!userVote ? { scale: 0.95 } : {}}
               onClick={() => vote(option)}
               disabled={!!userVote || voting || !user}
               className={`relative aspect-[4/5] overflow-hidden transition-all duration-500
-                ${!userVote && user ? 'cursor-pointer hover:opacity-95 hover:scale-[1.02]' : 'cursor-default'}
+                ${!userVote && user ? 'cursor-pointer' : 'cursor-default'}
                 ${isOther ? 'opacity-40 grayscale-[50%]' : 'opacity-100'}
                 ${option === 'A' ? 'rounded-l-2xl' : 'rounded-r-2xl'}
               `}
               aria-label={`Vote for option ${option}`}
             >
               {/* Image */}
-              <img
+              <motion.img
+                layoutId={`img-${post.id}-${option}`}
                 src={imgUrl}
                 alt={`Option ${option}`}
-                className={`w-full h-full object-cover transition-transform duration-700 ${
-                  !userVote && user ? 'hover:scale-110' : ''
-                }`}
+                className="w-full h-full object-cover"
               />
 
               {/* Overlay before voting */}
@@ -168,45 +182,69 @@ export default function DecisionCard({ post }) {
                 <div className={`absolute inset-0 flex items-center justify-center transition-all duration-300
                   ${!userVote && user ? 'bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-80 hover:opacity-100' : 'bg-gradient-to-t from-black/60 to-transparent'}
                 `}>
-                  <span className={`inline-flex items-center justify-center w-12 h-12 rounded-full font-bold text-xl
+                  <motion.span 
+                    whileHover={{ scale: 1.1 }}
+                    className={`inline-flex items-center justify-center w-12 h-12 rounded-full font-bold text-xl
                     text-white bg-black/40 backdrop-blur-md border border-white/20 transition-all duration-300
-                    ${!userVote && user ? 'hover:scale-110 hover:bg-white/20 hover:border-white/50 hover:shadow-glass' : ''}
-                    ${voting ? 'animate-pulse-glow' : ''}
+                    ${voting ? 'animate-pulse' : ''}
                   `}>
                     {option}
-                  </span>
+                  </motion.span>
                 </div>
               )}
 
               {/* Result overlay after voting */}
-              {showResult && (
-                <div className={`absolute inset-0 flex flex-col items-center justify-end pb-6 px-3 gap-2 transition-all duration-500 ${isVoted ? 'bg-primary-900/40 backdrop-blur-[2px]' : 'bg-black/60 backdrop-blur-sm'}`}>
-                  {isVoted && (
-                    <div className="absolute inset-0 bg-gradient-to-t from-primary-600/50 to-transparent animate-fade-in" />
-                  )}
-                  {isVoted && (
-                     <CheckCircle className="w-8 h-8 text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.8)] mb-2 relative z-10 animate-fade-up" />
-                  )}
-                  {/* Percentage bar */}
-                  <div className="w-full bg-black/40 backdrop-blur-xl rounded-full h-2.5 overflow-hidden relative z-10 border border-white/10 shadow-[inset_0_2px_4px_rgba(0,0,0,0.4)]">
-                    <div
-                      className={`h-full rounded-full vote-bar relative ${
-                        isVoted ? 'bg-gradient-to-r from-primary-500 to-accent-400 shadow-neon-primary' : 'bg-gray-500'
-                      }`}
-                      style={{ '--target-width': `${pct}%`, width: `${pct}%` }}
-                    >
-                      {isVoted && <div className="absolute inset-0 bg-white/20 animate-glass-shine" />}
+              <AnimatePresence>
+                {showResult && (
+                  <motion.div 
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className={`absolute inset-0 flex flex-col items-center justify-end pb-6 px-3 gap-2 transition-all duration-500 ${isVoted ? 'bg-primary-900/40 backdrop-blur-[2px]' : 'bg-black/60 backdrop-blur-sm'}`}>
+                    {isVoted && (
+                      <motion.div 
+                        initial={{ opacity: 0, scale: 0 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="absolute inset-0 bg-gradient-to-t from-primary-600/50 to-transparent" 
+                      />
+                    )}
+                    {isVoted && (
+                       <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                       >
+                         <CheckCircle className="w-8 h-8 text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.8)] mb-2 relative z-10" />
+                       </motion.div>
+                    )}
+                    
+                    {/* Percentage bar */}
+                    <div className="w-full bg-black/40 backdrop-blur-xl rounded-full h-2.5 overflow-hidden relative z-10 border border-white/10 shadow-[inset_0_2px_4px_rgba(0,0,0,0.4)]">
+                      <motion.div
+                        initial={{ width: 0 }}
+                        animate={{ width: `${pct}%` }}
+                        transition={{ duration: 1, ease: 'circOut' }}
+                        className={`h-full rounded-full relative ${
+                          isVoted ? 'bg-gradient-to-r from-primary-500 to-accent-400 shadow-neon-primary' : 'bg-gray-500'
+                        }`}
+                      >
+                        {isVoted && <div className="absolute inset-0 bg-white/20 animate-glass-shine" />}
+                      </motion.div>
                     </div>
-                  </div>
-                  <div className="flex items-end justify-between w-full relative z-10">
-                    <span className="text-white font-black text-2xl drop-shadow-md leading-none">{pct}%</span>
-                    <span className="text-gray-300 text-xs font-bold uppercase tracking-wider">
-                      {option === 'A' ? votes.A : votes.B} votes
-                    </span>
-                  </div>
-                </div>
-              )}
-            </button>
+                    <div className="flex items-end justify-between w-full relative z-10">
+                      <motion.span 
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        className="text-white font-black text-2xl drop-shadow-md leading-none"
+                      >
+                        {pct}%
+                      </motion.span>
+                      <span className="text-gray-300 text-[10px] font-bold uppercase tracking-wider">
+                        {option === 'A' ? votes.A : votes.B} votes
+                      </span>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </motion.button>
           )
         })}
       </div>
@@ -244,11 +282,18 @@ export default function DecisionCard({ post }) {
       </div>
 
       {/* Comments */}
-      {showComments && (
-        <div className="border-t border-white/10 bg-surface/30">
-          <CommentSection postId={post.id} onCountChange={setCommentCount} />
-        </div>
-      )}
-    </article>
+      <AnimatePresence>
+        {showComments && (
+          <motion.div 
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="border-t border-white/10 bg-surface/30 overflow-hidden"
+          >
+            <CommentSection postId={post.id} onCountChange={setCommentCount} />
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.article>
   )
 }

@@ -1,8 +1,8 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
-import { Sparkles, SlidersHorizontal } from 'lucide-react'
-import { useAuth } from '../hooks/useAuth'
+import { Sparkles } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import DecisionCard from '../components/DecisionCard'
+import SkeletonCard from '../components/SkeletonCard'
 
 const CATEGORIES = ['All', 'Fashion', 'Food', 'Shopping', 'Travel']
 const PAGE_SIZE = 10
@@ -121,7 +121,7 @@ export default function FeedPage() {
 
         {loadingMore && (
           <div className="flex justify-center py-4">
-            <span className="w-6 h-6 border-2 border-white/10 border-t-primary-500 rounded-full animate-spin shadow-neon-primary" />
+             <SkeletonCard />
           </div>
         )}
 
@@ -130,30 +130,6 @@ export default function FeedPage() {
             <p className="text-sm font-bold uppercase tracking-widest text-primary-500 drop-shadow">END OF FEED</p>
           </div>
         )}
-      </div>
-    </div>
-  )
-}
-
-function SkeletonCard() {
-  return (
-    <div className="glass-card animate-pulse">
-      <div className="flex items-center gap-3 p-4 pb-3 border-b border-white/5">
-        <div className="w-10 h-10 rounded-full bg-surfaceHover shadow-[0_0_15px_rgba(0,0,0,0.5)]" />
-        <div className="flex-1 space-y-2">
-          <div className="h-3.5 bg-surfaceHover rounded-full w-24" />
-          <div className="h-3 bg-surface/50 rounded-full w-16" />
-        </div>
-      </div>
-      <div className="px-5 py-4">
-        <div className="h-4 bg-surfaceHover rounded-full w-3/4" />
-      </div>
-      <div className="grid grid-cols-2 gap-1.5 mx-4 mb-5 rounded-2xl overflow-hidden relative shadow-lg">
-        <div className="aspect-[4/5] bg-surfaceHover rounded-l-2xl" />
-        <div className="aspect-[4/5] bg-surfaceHover/80 rounded-r-2xl" />
-      </div>
-      <div className="flex gap-2 px-5 pb-4 border-t border-white/5 pt-3">
-        <div className="h-6 w-16 bg-surfaceHover/50 rounded-lg" />
       </div>
     </div>
   )
