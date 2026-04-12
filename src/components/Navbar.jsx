@@ -1,6 +1,7 @@
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Home, PlusSquare, User, Zap, Sun, Moon } from 'lucide-react'
 import { useState, useEffect } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../hooks/useAuth'
 
 export default function Navbar() {
@@ -58,20 +59,24 @@ export default function Navbar() {
           </button>
 
           <nav className="hidden md:flex items-center gap-2">
-            {links.map(({ path, icon: Icon, label, requireAuth }) => {
+            {links.map(({ path, icon: Icon, label }) => {
               const isActive = location.pathname === path
               return (
                 <button
                   key={path}
                   onClick={() => navigate(path)}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all duration-200
-                    ${isActive
-                      ? 'bg-white/10 text-white shadow-glass'
-                      : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'
-                    }`}
+                  className={`relative flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all duration-300
+                    ${isActive ? 'text-white' : 'text-gray-400 hover:text-gray-200'}`}
                 >
-                  <Icon className={`w-4 h-4 ${isActive ? 'drop-shadow-[0_0_8px_rgba(255,255,255,0.4)]' : ''}`} />
-                  {label}
+                  {isActive && (
+                    <motion.div
+                      layoutId="nav-glow-desktop"
+                      className="absolute inset-0 bg-white/10 rounded-xl shadow-glass border border-white/5"
+                      transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
+                    />
+                  )}
+                  <Icon className={`w-4 h-4 relative z-10 ${isActive ? 'drop-shadow-[0_0_8px_rgba(255,255,255,0.4)]' : ''}`} />
+                  <span className="relative z-10">{label}</span>
                 </button>
               )
             })}
@@ -114,9 +119,19 @@ export default function Navbar() {
               >
                 <div className="relative">
                   <Icon className={`w-6 h-6 z-10 relative transition-transform duration-300 ${isActive ? 'text-white scale-110' : 'text-gray-400 group-hover:text-gray-300'}`} />
-                  {isActive && <div className="absolute inset-0 bg-primary-500/20 blur-md rounded-full" />}
+                  {isActive && (
+                    <>
+                      <motion.div 
+                        layoutId="nav-indicator"
+                        className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 bg-accent-400 rounded-full shadow-neon-accent"
+                      />
+                      <motion.div 
+                        layoutId="nav-glow-mobile"
+                        className="absolute inset-0 bg-primary-500/20 blur-md rounded-full -z-10" 
+                      />
+                    </>
+                  )}
                 </div>
-                {isActive && <span className="nav-item-indicator" />}
               </button>
             )
           })}

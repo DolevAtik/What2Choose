@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Eye, EyeOff, Mail, Lock, User, Zap } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../hooks/useAuth'
 
 export default function AuthPage() {
@@ -69,25 +70,35 @@ export default function AuthPage() {
         <div className="glass-panel p-6 animate-fade-up !rounded-3xl border-t border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.5)]">
 
           {/* Tab toggle */}
-          <div className="flex bg-black/40 rounded-2xl p-1 mb-8 gap-1 border border-white/5 shadow-inner">
+          <div className="flex bg-black/40 rounded-2xl p-1 mb-8 gap-1 border border-white/5 shadow-inner relative">
             <button
-              className={`flex-1 py-2.5 text-sm font-bold tracking-wide uppercase transition-all duration-300 rounded-xl ${
-                tab === 'login'
-                  ? 'bg-gradient-to-r from-primary-500/20 to-accent-500/20 text-white shadow-[0_0_15px_rgba(139,92,246,0.2)] border border-primary-500/30'
-                  : 'text-gray-500 hover:text-gray-300'
+              className={`flex-1 py-2.5 text-sm font-bold tracking-wide uppercase transition-all duration-300 rounded-xl relative z-10 ${
+                tab === 'login' ? 'text-white' : 'text-gray-500 hover:text-gray-300'
               }`}
               onClick={() => { setTab('login'); setError(''); setSuccess('') }}
             >
+              {tab === 'login' && (
+                <motion.div
+                  layoutId="auth-tab"
+                  className="absolute inset-0 bg-gradient-to-r from-primary-500/20 to-accent-500/20 shadow-[0_0_15px_rgba(139,92,246,0.2)] border border-primary-500/30 rounded-xl"
+                  transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
+                />
+              )}
               Sign In
             </button>
             <button
-              className={`flex-1 py-2.5 text-sm font-bold tracking-wide uppercase transition-all duration-300 rounded-xl ${
-                tab === 'signup'
-                  ? 'bg-gradient-to-r from-primary-500/20 to-accent-500/20 text-white shadow-[0_0_15px_rgba(139,92,246,0.2)] border border-primary-500/30'
-                  : 'text-gray-500 hover:text-gray-300'
+              className={`flex-1 py-2.5 text-sm font-bold tracking-wide uppercase transition-all duration-300 rounded-xl relative z-10 ${
+                tab === 'signup' ? 'text-white' : 'text-gray-500 hover:text-gray-300'
               }`}
               onClick={() => { setTab('signup'); setError(''); setSuccess('') }}
             >
+              {tab === 'signup' && (
+                <motion.div
+                  layoutId="auth-tab"
+                  className="absolute inset-0 bg-gradient-to-r from-primary-500/20 to-accent-500/20 shadow-[0_0_15px_rgba(139,92,246,0.2)] border border-primary-500/30 rounded-xl"
+                  transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
+                />
+              )}
               Create Account
             </button>
           </div>
@@ -105,73 +116,83 @@ export default function AuthPage() {
           )}
 
           {/* Form */}
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {tab === 'signup' && (
+          <AnimatePresence mode="wait">
+            <motion.form
+              key={tab}
+              initial={{ opacity: 0, x: tab === 'login' ? -20 : 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: tab === 'login' ? 20 : -20 }}
+              transition={{ duration: 0.3, ease: 'easeInOut' }}
+              onSubmit={handleSubmit} 
+              className="space-y-4"
+            >
+              {tab === 'signup' && (
+                <div className="relative group">
+                  <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none group-focus-within:text-primary-400 transition-colors" />
+                  <input
+                    id="username"
+                    type="text"
+                    placeholder="Username"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    className="input-base pl-12 bg-black/40 text-base py-4"
+                    autoComplete="username"
+                  />
+                </div>
+              )}
+
               <div className="relative group">
-                <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none group-focus-within:text-primary-400 transition-colors" />
+                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none group-focus-within:text-primary-400 transition-colors" />
                 <input
-                  id="username"
-                  type="text"
-                  placeholder="Username"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
+                  id="email"
+                  type="email"
+                  placeholder="Email address"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
                   className="input-base pl-12 bg-black/40 text-base py-4"
-                  autoComplete="username"
+                  autoComplete="email"
+                  required
                 />
               </div>
-            )}
 
-            <div className="relative group">
-              <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none group-focus-within:text-primary-400 transition-colors" />
-              <input
-                id="email"
-                type="email"
-                placeholder="Email address"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="input-base pl-12 bg-black/40 text-base py-4"
-                autoComplete="email"
-                required
-              />
-            </div>
+              <div className="relative group">
+                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none group-focus-within:text-primary-400 transition-colors" />
+                <input
+                  id="password"
+                  type={showPw ? 'text' : 'password'}
+                  placeholder="Password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="input-base pl-12 pr-12 bg-black/40 text-base py-4"
+                  autoComplete={tab === 'login' ? 'current-password' : 'new-password'}
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPw(!showPw)}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white transition-colors"
+                  aria-label={showPw ? 'Hide password' : 'Show password'}
+                >
+                  {showPw ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                </button>
+              </div>
 
-            <div className="relative group">
-              <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none group-focus-within:text-primary-400 transition-colors" />
-              <input
-                id="password"
-                type={showPw ? 'text' : 'password'}
-                placeholder="Password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="input-base pl-12 pr-12 bg-black/40 text-base py-4"
-                autoComplete={tab === 'login' ? 'current-password' : 'new-password'}
-                required
-              />
               <button
-                type="button"
-                onClick={() => setShowPw(!showPw)}
-                className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white transition-colors"
-                aria-label={showPw ? 'Hide password' : 'Show password'}
+                type="submit"
+                disabled={loading}
+                className="btn-primary w-full py-4 text-base uppercase tracking-widest mt-2 shadow-[0_8px_30px_rgba(139,92,246,0.4)]"
               >
-                {showPw ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                {loading ? (
+                  <span className="flex items-center gap-2">
+                    <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    {tab === 'login' ? 'Signing in...' : 'Creating account...'}
+                  </span>
+                ) : (
+                  tab === 'login' ? 'Sign In' : 'Create Account'
+                )}
               </button>
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="btn-primary w-full py-4 text-base uppercase tracking-widest mt-2 shadow-[0_8px_30px_rgba(139,92,246,0.4)]"
-            >
-              {loading ? (
-                <span className="flex items-center gap-2">
-                  <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  {tab === 'login' ? 'Signing in...' : 'Creating account...'}
-                </span>
-              ) : (
-                tab === 'login' ? 'Sign In' : 'Create Account'
-              )}
-            </button>
-          </form>
+            </motion.form>
+          </AnimatePresence>
 
           {/* Divider */}
           <div className="flex items-center gap-4 my-6">

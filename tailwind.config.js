@@ -43,15 +43,19 @@ export default {
         },
         barGrow: {
           '0%': { width: '0%', opacity: '0' },
-          '100%': { width: 'var(--bar-width)', opacity: '1' },
+          '100%': { width: '100%', opacity: '1' },
         },
         pulseGlow: {
-          '0%, 100%': { opacity: '0.6', filter: 'blur(20px)' },
-          '50%': { opacity: '1', filter: 'blur(30px)' },
+          '0%, 100%': { opacity: '0.6', filter: 'blur(10px)', transform: 'scale(1)' },
+          '50%': { opacity: '1', filter: 'blur(20px)', transform: 'scale(1.05)' },
         },
         float: {
           '0%, 100%': { transform: 'translateY(0)' },
           '50%': { transform: 'translateY(-10px)' },
+        },
+        glassShine: {
+          '0%': { transform: 'translateX(-100%) skewX(-15deg)' },
+          '100%': { transform: 'translateX(200%) skewX(-15deg)' },
         },
       },
       boxShadow: {
