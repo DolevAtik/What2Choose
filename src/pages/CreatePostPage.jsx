@@ -1,26 +1,47 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, Send, Lightbulb } from 'lucide-react'
+import { ArrowLeft, Send, Lightbulb, Plus, Minus } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
+import { useLanguage } from '../contexts/LanguageContext'
 import ImageUpload from '../components/ImageUpload'
 
 const CATEGORIES = ['Fashion', 'Food', 'Shopping', 'Travel']
+const OPTION_LETTERS = ['A', 'B', 'C', 'D']
 
 export default function CreatePostPage() {
   const navigate = useNavigate()
   const { user } = useAuth()
+  const { t } = useLanguage()
 
   const [question, setQuestion] = useState('')
-  const [imageA, setImageA] = useState(null)
-  const [imageB, setImageB] = useState(null)
+  // images is an array of 2–4 File|null values
+  const [images, setImages] = useState([null, null])
   const [category, setCategory] = useState('')
   const [loading, setLoading] = useState(false)
   const [progressMsg, setProgressMsg] = useState('')
   const [error, setError] = useState('')
+
+  function addOption() {
+    if (images.length < 4) setImages(prev => [...prev, null])
+  }
+
+  function removeOption(idx) {
+    if (images.length <= 2) return
+    setImages(prev => prev.filter((_, i) => i !== idx))
+  }
+
+  function setImage(idx, file) {
+    setImages(prev => {
+      const next = [...prev]
+      next[idx] = file
+      return next
+    })
+  }
+
   async function processImage(file) {
     setProgressMsg(`Processing ${file.name}...`)
-
     return new Promise((resolve, reject) => {
       const reader = new FileReader()
       reader.onerror = () => reject(new Error('Failed to read file'))
@@ -28,33 +49,14 @@ export default function CreatePostPage() {
         const img = new Image()
         img.onerror = () => reject(new Error('Failed to load image'))
         img.onload = () => {
-          const MAX_SIZE = 800 // Increased quality slightly since we use storage now
-          let width = img.width
-          let height = img.height
-
-          if (width > height) {
-            if (width > MAX_SIZE) {
-              height *= MAX_SIZE / width
-              width = MAX_SIZE
-            }
-          } else {
-            if (height > MAX_SIZE) {
-              width *= MAX_SIZE / height
-              height = MAX_SIZE
-            }
-          }
-
+          const MAX_SIZE = 800
+          let w = img.width, h = img.height
+          if (w > h) { if (w > MAX_SIZE) { h *= MAX_SIZE / w; w = MAX_SIZE } }
+          else { if (h > MAX_SIZE) { w *= MAX_SIZE / h; h = MAX_SIZE } }
           const canvas = document.createElement('canvas')
-          canvas.width = width
-          canvas.height = height
-          
-          const ctx = canvas.getContext('2d')
-          ctx.drawImage(img, 0, 0, width, height)
-          
-          canvas.toBlob((blob) => {
-            if (blob) resolve(blob)
-            else reject(new Error('Failed to create image blob'))
-          }, 'image/jpeg', 0.8)
+          canvas.width = w; canvas.height = h
+          canvas.getContext('2d').drawImage(img, 0, 0, w, h)
+          canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('Blob failed')), 'image/jpeg', 0.8)
         }
         img.src = e.target.result
       }
@@ -63,92 +65,62 @@ export default function CreatePostPage() {
   }
 
   async function uploadToStorage(blob, path) {
-    console.log(`Starting upload to storage: ${path}`, blob)
-    
-    // Add a timeout to the upload just in case it hangs
-    const uploadPromise = supabase.storage
-      .from('posts')
-      .upload(path, blob, {
-        contentType: 'image/jpeg',
-        upsert: true
-      })
-
-    const timeoutPromise = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error('Storage upload timed out. This is usually due to missing RLS policies in Supabase.')), 15000)
-    )
-
-    const { data, error } = await Promise.race([uploadPromise, timeoutPromise])
-
-    if (error) {
-      console.error('Storage upload error:', error)
-      throw error
-    }
-    
-    console.log('Upload successful, getting public URL...')
-    const { data: { publicUrl } } = supabase.storage
-      .from('posts')
-      .getPublicUrl(path)
-      
-    console.log('Public URL:', publicUrl)
+    const upload = supabase.storage.from('posts').upload(path, blob, { contentType: 'image/jpeg', upsert: true })
+    const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Upload timed out')), 20000))
+    const { data, error } = await Promise.race([upload, timeout])
+    if (error) throw error
+    const { data: { publicUrl } } = supabase.storage.from('posts').getPublicUrl(path)
     return publicUrl
   }
 
   async function handleSubmit(e) {
     e.preventDefault()
     setError('')
-    setProgressMsg('')
 
     if (!question.trim()) return setError('Please enter your question')
-    if (!imageA) return setError('Please upload Option A image')
-    if (!imageB) return setError('Please upload Option B image')
+    for (let i = 0; i < images.length; i++) {
+      if (!images[i]) return setError(`Please upload Option ${OPTION_LETTERS[i]}`)
+    }
     if (!category) return setError('Please select a category')
 
     setLoading(true)
-    setProgressMsg('Processing images...')
+    setProgressMsg(t('processingImages'))
 
     try {
       const ts = Date.now()
-      
-      console.log('Processing Image A...')
-      const blobA = await processImage(imageA)
-      console.log('Processing Image B...')
-      const blobB = await processImage(imageB)
+      const urls = []
 
-      setProgressMsg('Uploading Image A...')
-      const urlA = await uploadToStorage(blobA, `${user.id}/${ts}_a.jpg`)
-      
-      setProgressMsg('Uploading Image B...')
-      const urlB = await uploadToStorage(blobB, `${user.id}/${ts}_b.jpg`)
-
-      setProgressMsg('Saving post to database...')
-      console.log('Saving to DB...', { urlA, urlB })
-      
-      const { data: dbData, error: insertError } = await supabase.from('posts').insert({
-        author_id: user.id,
-        question: question.trim(),
-        option_a_url: urlA,
-        option_b_url: urlB,
-        category,
-      })
-
-      if (insertError) {
-        console.error('Post Insert Error:', insertError)
-        throw new Error(`Database error: ${insertError.message}`)
+      for (let i = 0; i < images.length; i++) {
+        setProgressMsg(t('uploadingImage', { n: i + 1 }))
+        const blob = await processImage(images[i])
+        const url = await uploadToStorage(blob, `${user.id}/${ts}_${OPTION_LETTERS[i].toLowerCase()}.jpg`)
+        urls.push(url)
       }
 
-      console.log('Post created successfully!')
-      setProgressMsg('Done! Redirecting...')
+      setProgressMsg(t('savingPost'))
+
+      const row = {
+        author_id: user.id,
+        question: question.trim(),
+        option_a_url: urls[0],
+        option_b_url: urls[1],
+        option_c_url: urls[2] ?? null,
+        option_d_url: urls[3] ?? null,
+        category,
+      }
+
+      const { error: insertError } = await supabase.from('posts').insert(row)
+      if (insertError) throw new Error(`Database error: ${insertError.message}`)
+
       navigate('/')
     } catch (err) {
-      console.error('Full caught error in handleSubmit:', err)
+      console.error(err)
       if (err.message?.includes('bucket not found')) {
-        setError('Storage bucket "posts" not found. Please create it in your Supabase dashboard.')
-      } else if (err.message?.includes('storage_quota_exceeded')) {
-        setError('Storage quota exceeded. Please check your Supabase dashboard.')
+        setError('Storage bucket "posts" not found.')
       } else if (err.message?.includes('Policy')) {
-        setError('Permission denied. Please run the RLS SQL script in your Supabase dashboard.')
+        setError('Permission denied. Run the RLS SQL script in Supabase.')
       } else {
-        setError(err.message || 'Failed to create post. Please try again.')
+        setError(err.message || 'Failed to create post.')
       }
     } finally {
       setLoading(false)
@@ -159,17 +131,22 @@ export default function CreatePostPage() {
   if (!user) {
     return (
       <div className="min-h-screen flex items-center justify-center p-4 relative z-10">
-        <div className="glass-panel text-center p-8 max-w-sm w-full animate-fade-up">
-          <div className="w-16 h-16 bg-surfaceHover rounded-full flex items-center justify-center mx-auto mb-4 shadow-glass">
-            <span className="text-2xl">🔒</span>
-          </div>
-          <h2 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-100 to-gray-400 mb-2">Sign in Required</h2>
-          <p className="text-gray-400 mb-6 font-medium">You need an account to post a decision.</p>
-          <button onClick={() => navigate('/auth')} className="btn-primary w-full shadow-neon-primary">Go to Sign In</button>
+        <div className="glass-panel text-center p-8 max-w-sm w-full">
+          <span className="text-4xl block mb-4">🔒</span>
+          <h2 className="text-xl font-bold text-gray-200 mb-2">Sign in Required</h2>
+          <p className="text-gray-400 mb-6">You need an account to post a decision.</p>
+          <button onClick={() => navigate('/auth')} className="btn-primary w-full">Go to Sign In</button>
         </div>
       </div>
     )
   }
+
+  // Grid layout: 2→2col, 3→2+1 centered, 4→2x2
+  const gridClass = images.length === 4
+    ? 'grid-cols-2'
+    : images.length === 3
+      ? 'grid-cols-2'
+      : 'grid-cols-2'
 
   return (
     <div className="min-h-screen pt-20 pb-28 md:pb-12 md:pt-24 relative z-10">
@@ -178,25 +155,21 @@ export default function CreatePostPage() {
         <div className="max-w-lg mx-auto px-4 py-3 flex items-center gap-3">
           <button
             onClick={() => navigate(-1)}
-            className="w-10 h-10 flex items-center justify-center rounded-xl bg-surface/50 hover:bg-surface border border-white/5 transition-all duration-300 hover:-translate-x-1"
-            aria-label="Go back"
+            className="w-10 h-10 flex items-center justify-center rounded-xl bg-surface/50 hover:bg-surface border border-white/5 transition-all hover:-translate-x-1"
           >
             <ArrowLeft className="w-5 h-5 text-gray-300" />
           </button>
-          <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-100 to-gray-400">New Decision</h1>
+          <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-100 to-gray-400">{t('newDecision')}</h1>
         </div>
       </div>
 
       <div className="max-w-lg mx-auto px-4 pt-6 space-y-6">
-
         {/* Tip */}
         <div className="glass-panel p-4 flex gap-4 items-start border-l-4 border-l-primary-500">
-          <div className="w-8 h-8 rounded-full bg-primary-500/20 flex items-center justify-center shrink-0 shadow-neon-primary">
-             <Lightbulb className="w-4 h-4 text-primary-400" />
+          <div className="w-8 h-8 rounded-full bg-primary-500/20 flex items-center justify-center shrink-0">
+            <Lightbulb className="w-4 h-4 text-primary-400" />
           </div>
-          <p className="text-sm text-gray-300 leading-relaxed font-medium">
-            Post two options and let the community vote. The more specific your question, the better the results!
-          </p>
+          <p className="text-sm text-gray-300 leading-relaxed font-medium">{t('tipText')}</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6 glass-panel p-5 md:p-6 !rounded-3xl">
@@ -204,11 +177,11 @@ export default function CreatePostPage() {
           {/* Question */}
           <div className="space-y-2">
             <label htmlFor="question" className="text-sm font-bold text-gray-200 tracking-wide uppercase">
-              Your Question <span className="text-accent-500">*</span>
+              {t('yourQuestion')} <span className="text-accent-500">*</span>
             </label>
             <textarea
               id="question"
-              placeholder="e.g. Which outfit should I wear to the party?"
+              placeholder={t('questionPlaceholder')}
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
               rows={3}
@@ -218,25 +191,62 @@ export default function CreatePostPage() {
             <p className="text-xs font-semibold text-gray-500 text-right">{question.length}/200</p>
           </div>
 
-          {/* Images */}
-          <div className="grid grid-cols-2 gap-3 md:gap-4">
-            <ImageUpload
-              id="option-a-upload"
-              label="Option A"
-              value={imageA}
-              onChange={setImageA}
-            />
-            <ImageUpload
-              id="option-b-upload"
-              label="Option B"
-              value={imageB}
-              onChange={setImageB}
-            />
+          {/* Options Grid */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-bold text-gray-200 tracking-wide uppercase">
+                Options <span className="text-xs text-gray-500 normal-case font-medium ml-1">({images.length}/4)</span>
+              </label>
+              {images.length < 4 && (
+                <motion.button
+                  type="button"
+                  onClick={addOption}
+                  whileTap={{ scale: 0.95 }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-primary-400 border border-primary-500/30 bg-primary-500/10 hover:bg-primary-500/20 transition-all"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  {t('addOption')}
+                </motion.button>
+              )}
+            </div>
+
+            <div className={`grid ${gridClass} gap-3`}>
+              <AnimatePresence mode="popLayout">
+                {images.map((img, idx) => (
+                  <motion.div
+                    key={idx}
+                    layout
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.9 }}
+                    className={`relative ${images.length === 3 && idx === 2 ? 'col-span-2 max-w-[50%] mx-auto w-full' : ''}`}
+                  >
+                    <ImageUpload
+                      id={`option-${OPTION_LETTERS[idx].toLowerCase()}-upload`}
+                      label={t('optionLabel', { letter: OPTION_LETTERS[idx] })}
+                      value={img}
+                      onChange={(file) => setImage(idx, file)}
+                    />
+                    {/* Remove button (only for C and D) */}
+                    {idx >= 2 && (
+                      <button
+                        type="button"
+                        onClick={() => removeOption(idx)}
+                        className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 hover:bg-red-400 rounded-full flex items-center justify-center transition-colors shadow-lg z-10"
+                        aria-label={t('removeOption')}
+                      >
+                        <Minus className="w-3 h-3 text-white" />
+                      </button>
+                    )}
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+            </div>
           </div>
 
           {/* Category */}
           <div className="space-y-2">
-            <label className="text-sm font-bold text-gray-200 tracking-wide uppercase">Category <span className="text-accent-500">*</span></label>
+            <label className="text-sm font-bold text-gray-200 tracking-wide uppercase">{t('category')} <span className="text-accent-500">*</span></label>
             <div className="grid grid-cols-2 gap-2">
               {CATEGORIES.map((cat) => (
                 <button
@@ -249,10 +259,7 @@ export default function CreatePostPage() {
                       : 'bg-black/40 border-white/5 text-gray-500 hover:border-white/10 hover:text-gray-300 hover:bg-surface'
                     }`}
                 >
-                  {cat === 'Fashion' ? '👗 Fashion' :
-                   cat === 'Food' ? '🍕 Food' :
-                   cat === 'Shopping' ? '🛍 Shopping' :
-                   '✈️ Travel'}
+                  {cat === 'Fashion' ? '👗 Fashion' : cat === 'Food' ? '🍕 Food' : cat === 'Shopping' ? '🛍 Shopping' : '✈️ Travel'}
                 </button>
               ))}
             </div>
@@ -260,7 +267,7 @@ export default function CreatePostPage() {
 
           {/* Error */}
           {error && (
-            <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-xl text-sm font-semibold text-red-400 animate-fade-in shadow-[0_0_15px_rgba(239,68,68,0.1)]">
+            <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-xl text-sm font-semibold text-red-400">
               {error}
             </div>
           )}
@@ -274,12 +281,12 @@ export default function CreatePostPage() {
             {loading ? (
               <span className="flex items-center gap-2">
                 <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                {progressMsg || 'Uploading...'}
+                {progressMsg || t('uploading')}
               </span>
             ) : (
               <>
                 <Send className="w-5 h-5" />
-                Post Decision
+                {t('postDecision')}
               </>
             )}
           </button>

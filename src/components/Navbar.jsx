@@ -1,15 +1,18 @@
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Home, PlusSquare, User, Zap, Sun, Moon, Search } from 'lucide-react'
+import { Home, PlusSquare, User, Zap, Search } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../hooks/useAuth'
+import { useLanguage } from '../contexts/LanguageContext'
 import SearchBar from './SearchBar'
 import NotificationsPanel from './NotificationsPanel'
+import SettingsPanel from './SettingsPanel'
 
 export default function Navbar() {
   const location = useLocation()
   const navigate = useNavigate()
   const { user } = useAuth()
+  const { t } = useLanguage()
 
   const [isLightMode, setIsLightMode] = useState(() => {
     return localStorage.getItem('theme') === 'light'
@@ -33,12 +36,10 @@ export default function Navbar() {
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
-  const toggleTheme = () => setIsLightMode(!isLightMode)
-
   const links = [
-    { path: '/', icon: Home, label: 'Feed' },
+    { path: '/', icon: Home, label: t('feed') },
     { path: '/create', icon: PlusSquare, label: 'Create', requireAuth: true },
-    { path: user ? '/profile' : '/auth', icon: User, label: user ? 'Profile' : 'Sign In' },
+    { path: user ? '/profile' : '/auth', icon: User, label: user ? t('myProfile') : t('signIn') },
   ]
 
   return (
@@ -61,7 +62,7 @@ export default function Navbar() {
         </button>
 
         <div className="flex items-center gap-1 md:gap-2">
-          {/* Search button */}
+          {/* Search */}
           <button
             onClick={() => setSearchOpen(true)}
             className="p-2 rounded-xl text-gray-400 hover:text-gray-200 hover:bg-white/5 transition-all duration-200 group"
@@ -70,21 +71,14 @@ export default function Navbar() {
             <Search className="w-5 h-5 group-hover:scale-110 transition-transform" />
           </button>
 
-          {/* Notifications */}
+          {/* Notifications (only when logged in) */}
           <NotificationsPanel />
 
-          {/* Theme toggle */}
-          <button
-            onClick={toggleTheme}
-            className="p-2 rounded-xl text-gray-400 hover:text-gray-200 hover:bg-white/5 transition-all duration-200 group"
-            aria-label="Toggle Theme"
-          >
-            {isLightMode ? (
-              <Moon className="w-5 h-5 group-hover:scale-110 transition-transform" />
-            ) : (
-              <Sun className="w-5 h-5 group-hover:scale-110 transition-transform" />
-            )}
-          </button>
+          {/* Settings hamburger (replaces sun/moon) */}
+          <SettingsPanel
+            isLightMode={isLightMode}
+            onToggleTheme={() => setIsLightMode(prev => !prev)}
+          />
 
           {/* Desktop nav links */}
           <nav className="hidden md:flex items-center gap-2 ml-1">

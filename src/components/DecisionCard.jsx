@@ -1,122 +1,146 @@
 import { useState, useEffect, useRef } from 'react'
-import { MessageCircle, Share2, Heart, ChevronDown, ChevronUp, CheckCircle } from 'lucide-react'
+import { MessageCircle, Share2, ChevronDown, ChevronUp, CheckCircle, Heart } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import confetti from 'canvas-confetti'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
+import { useLanguage } from '../contexts/LanguageContext'
 import CommentSection from './CommentSection'
 
-const CATEGORY_COLORS = {
-  Fashion: 'bg-pink-100 text-pink-600',
-  Food: 'bg-orange-100 text-orange-600',
-  Shopping: 'bg-emerald-100 text-emerald-600',
-  Travel: 'bg-sky-100 text-sky-600',
-}
+const OPTION_LETTERS = ['A', 'B', 'C', 'D']
 
 export default function DecisionCard({ post }) {
   const { user } = useAuth()
+  const { t } = useLanguage()
   const navigate = useNavigate()
-  const [userVote, setUserVote] = useState(null) // 'A' | 'B' | null
-  const [votes, setVotes] = useState({ A: 0, B: 0 })
+
+  const [userVote, setUserVote] = useState(null)
+  const [votes, setVotes] = useState({ A: 0, B: 0, C: 0, D: 0 })
   const [showComments, setShowComments] = useState(false)
   const [commentCount, setCommentCount] = useState(0)
   const [voting, setVoting] = useState(false)
   const [showResult, setShowResult] = useState(false)
+  // Likes
+  const [likeCount, setLikeCount] = useState(0)
+  const [hasLiked, setHasLiked] = useState(false)
+  const [liking, setLiking] = useState(false)
+
   const hasLoaded = useRef(false)
+
+  // Build options list from post fields
+  const options = [
+    { letter: 'A', url: post.option_a_url },
+    { letter: 'B', url: post.option_b_url },
+    post.option_c_url ? { letter: 'C', url: post.option_c_url } : null,
+    post.option_d_url ? { letter: 'D', url: post.option_d_url } : null,
+  ].filter(Boolean)
+
+  const optionCount = options.length
 
   useEffect(() => {
     if (hasLoaded.current) return
     hasLoaded.current = true
-    loadVotes()
+    loadData()
   }, [post.id])
 
-  async function loadVotes() {
-    // Fetch vote counts
+  async function loadData() {
+    // Votes
     const { data: votesData } = await supabase
-      .from('votes')
-      .select('choice')
-      .eq('post_id', post.id)
+      .from('votes').select('choice').eq('post_id', post.id)
 
     if (votesData) {
-      const counts = { A: 0, B: 0 }
-      votesData.forEach((v) => counts[v.choice]++)
+      const counts = { A: 0, B: 0, C: 0, D: 0 }
+      votesData.forEach(v => counts[v.choice] = (counts[v.choice] || 0) + 1)
       setVotes(counts)
     }
 
-    // Check if the current user voted
     if (user) {
+      // My vote
       const { data: myVote } = await supabase
-        .from('votes')
-        .select('choice')
-        .eq('post_id', post.id)
-        .eq('user_id', user.id)
-        .maybeSingle()
+        .from('votes').select('choice').eq('post_id', post.id).eq('user_id', user.id).maybeSingle()
+      if (myVote) { setUserVote(myVote.choice); setShowResult(true) }
 
-      if (myVote) {
-        setUserVote(myVote.choice)
-        setShowResult(true)
-      }
+      // My like (graceful – table may not exist yet)
+      try {
+        const { data: myLike } = await supabase
+          .from('likes').select('id').eq('post_id', post.id).eq('user_id', user.id).maybeSingle()
+        setHasLiked(!!myLike)
+      } catch (e) { /* likes table not created yet */ }
     }
 
-    // Comment count
-    const { count } = await supabase
-      .from('comments')
-      .select('*', { count: 'exact', head: true })
-      .eq('post_id', post.id)
+    // Like count (graceful)
+    try {
+      const { count: likeCnt } = await supabase
+        .from('likes').select('*', { count: 'exact', head: true }).eq('post_id', post.id)
+      setLikeCount(likeCnt || 0)
+    } catch (e) { /* likes table not created yet */ }
 
-    setCommentCount(count || 0)
+    // Comment count
+    const { count: cCnt } = await supabase
+      .from('comments').select('*', { count: 'exact', head: true }).eq('post_id', post.id)
+    setCommentCount(cCnt || 0)
   }
+
 
   async function vote(choice) {
     if (!user || userVote || voting) return
     setVoting(true)
-
     try {
-      const { error } = await supabase.from('votes').insert({
-        post_id: post.id,
-        user_id: user.id,
-        choice,
-      })
-
-      if (error) {
-        console.error('Vote error:', error)
-        return
-      }
-
-      // CELEBRATION!
-      confetti({
-        particleCount: 100,
-        spread: 70,
-        origin: { y: 0.6 },
-        colors: ['#8b5cf6', '#ec4899', '#3b82f6'],
-      })
-
+      const { error } = await supabase.from('votes').insert({ post_id: post.id, user_id: user.id, choice })
+      if (error) { console.error(error); return }
+      confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 }, colors: ['#8b5cf6', '#ec4899', '#3b82f6'] })
       setUserVote(choice)
-      setVotes((prev) => ({ ...prev, [choice]: prev[choice] + 1 }))
+      setVotes(prev => ({ ...prev, [choice]: (prev[choice] || 0) + 1 }))
       setTimeout(() => setShowResult(true), 100)
     } finally {
       setVoting(false)
     }
   }
 
-  const total = votes.A + votes.B
-  const pctA = total === 0 ? 50 : Math.round((votes.A / total) * 100)
-  const pctB = 100 - pctA
+  async function toggleLike(e) {
+    e.stopPropagation()
+    if (!user || liking) return
+    setLiking(true)
+    try {
+      if (hasLiked) {
+        await supabase.from('likes').delete().eq('post_id', post.id).eq('user_id', user.id)
+        setHasLiked(false)
+        setLikeCount(prev => Math.max(0, prev - 1))
+      } else {
+        await supabase.from('likes').insert({ post_id: post.id, user_id: user.id })
+        setHasLiked(true)
+        setLikeCount(prev => prev + 1)
+      }
+    } finally {
+      setLiking(false)
+    }
+  }
+
+  // Calculate percentages for all options
+  const total = options.reduce((sum, o) => sum + (votes[o.letter] || 0), 0)
+  function pct(letter) {
+    if (total === 0) return Math.round(100 / optionCount)
+    return Math.round(((votes[letter] || 0) / total) * 100)
+  }
 
   function handleShare() {
-    if (navigator.share) {
-      navigator.share({ title: post.question, url: window.location.href })
-    } else {
-      navigator.clipboard.writeText(window.location.href)
-    }
+    if (navigator.share) { navigator.share({ title: post.question, url: window.location.href }) }
+    else { navigator.clipboard.writeText(window.location.href) }
   }
 
   const authorName = post.profiles?.username || post.profiles?.email?.split('@')[0] || 'User'
   const avatarUrl = post.profiles?.avatar_url
 
+  // Layout grid class
+  const gridClass = optionCount === 4
+    ? 'grid-cols-2'
+    : optionCount === 3
+      ? 'grid-cols-2'
+      : 'grid-cols-2'
+
   return (
-    <motion.article 
+    <motion.article
       layout
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
@@ -144,7 +168,7 @@ export default function DecisionCard({ post }) {
           </div>
         </button>
         {post.category && (
-          <span className="text-[10px] font-bold uppercase tracking-wider px-3 py-1.5 rounded-full bg-surfaceHover text-primary-400 border border-primary-500/20 shadow-[0_0_10px_rgba(139,92,246,0.1)]">
+          <span className="text-[10px] font-bold uppercase tracking-wider px-3 py-1.5 rounded-full bg-surfaceHover text-primary-400 border border-primary-500/20 shadow-[0_0_10px_rgba(139,92,246,0.1)] shrink-0">
             {post.category}
           </span>
         )}
@@ -155,97 +179,85 @@ export default function DecisionCard({ post }) {
         <h2 className="text-[17px] font-bold text-transparent bg-clip-text bg-gradient-to-br from-white to-gray-400 leading-snug">{post.question}</h2>
       </div>
 
-      {/* Images */}
-      <div className="grid grid-cols-2 gap-1.5 mx-4 mb-5 rounded-2xl overflow-hidden relative shadow-lg">
-        {['A', 'B'].map((option) => {
-          const imgUrl = option === 'A' ? post.option_a_url : post.option_b_url
-          const pct = option === 'A' ? pctA : pctB
-          const isVoted = userVote === option
-          const isOther = userVote && userVote !== option
+      {/* Options Grid */}
+      <div className={`grid ${gridClass} gap-1.5 mx-4 mb-5 rounded-2xl overflow-hidden relative shadow-lg`}>
+        {options.map((opt) => {
+          const p = pct(opt.letter)
+          const isVoted = userVote === opt.letter
+          const isOther = userVote && userVote !== opt.letter
+          const isFirst = opt.letter === 'A'
+          const isLast = opt.letter === options[options.length - 1].letter
+          // Special center layout for 3rd option when count=3
+          const isThirdOfThree = optionCount === 3 && opt.letter === 'C'
 
           return (
             <motion.button
-              key={option}
+              key={opt.letter}
               whileTap={!userVote ? { scale: 0.95 } : {}}
-              onClick={() => vote(option)}
+              onClick={() => vote(opt.letter)}
               disabled={!!userVote || voting || !user}
               className={`relative aspect-[4/5] overflow-hidden transition-all duration-500
                 ${!userVote && user ? 'cursor-pointer' : 'cursor-default'}
                 ${isOther ? 'opacity-40 grayscale-[50%]' : 'opacity-100'}
-                ${option === 'A' ? 'rounded-l-2xl' : 'rounded-r-2xl'}
+                ${isThirdOfThree ? 'col-span-2 max-w-[50%] mx-auto w-full !aspect-square' : ''}
+                ${isFirst && !isThirdOfThree ? 'rounded-l-2xl' : ''}
+                ${isLast && !isThirdOfThree ? 'rounded-r-2xl' : ''}
+                ${isThirdOfThree ? 'rounded-2xl' : ''}
               `}
-              aria-label={`Vote for option ${option}`}
+              aria-label={`Vote for option ${opt.letter}`}
             >
-              {/* Image */}
               <motion.img
-                layoutId={`img-${post.id}-${option}`}
-                src={imgUrl}
-                alt={`Option ${option}`}
+                layoutId={`img-${post.id}-${opt.letter}`}
+                src={opt.url}
+                alt={`Option ${opt.letter}`}
                 className="w-full h-full object-cover"
               />
 
-              {/* Overlay before voting */}
+              {/* Pre-vote overlay */}
               {!showResult && (
                 <div className={`absolute inset-0 flex items-center justify-center transition-all duration-300
-                  ${!userVote && user ? 'bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-80 hover:opacity-100' : 'bg-gradient-to-t from-black/60 to-transparent'}
-                `}>
-                  <motion.span 
+                  ${!userVote && user ? 'bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-80 hover:opacity-100' : 'bg-gradient-to-t from-black/60 to-transparent'}`}>
+                  <motion.span
                     whileHover={{ scale: 1.1 }}
-                    className={`inline-flex items-center justify-center w-12 h-12 rounded-full font-bold text-xl
-                    text-white bg-black/40 backdrop-blur-md border border-white/20 transition-all duration-300
-                    ${voting ? 'animate-pulse' : ''}
-                  `}>
-                    {option}
+                    className={`inline-flex items-center justify-center w-12 h-12 rounded-full font-bold text-xl text-white bg-black/40 backdrop-blur-md border border-white/20 ${voting ? 'animate-pulse' : ''}`}
+                  >
+                    {opt.letter}
                   </motion.span>
                 </div>
               )}
 
-              {/* Result overlay after voting */}
+              {/* Result overlay */}
               <AnimatePresence>
                 {showResult && (
-                  <motion.div 
+                  <motion.div
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
-                    className={`absolute inset-0 flex flex-col items-center justify-end pb-6 px-3 gap-2 transition-all duration-500 ${isVoted ? 'bg-primary-900/40 backdrop-blur-[2px]' : 'bg-black/60 backdrop-blur-sm'}`}>
+                    className={`absolute inset-0 flex flex-col items-center justify-end pb-4 px-3 gap-2 transition-all duration-500 ${isVoted ? 'bg-primary-900/40 backdrop-blur-[2px]' : 'bg-black/60 backdrop-blur-sm'}`}
+                  >
                     {isVoted && (
-                      <motion.div 
-                        initial={{ opacity: 0, scale: 0 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        className="absolute inset-0 bg-gradient-to-t from-primary-600/50 to-transparent" 
+                      <motion.div initial={{ opacity: 0, scale: 0 }} animate={{ opacity: 1, scale: 1 }}
+                        className="absolute inset-0 bg-gradient-to-t from-primary-600/50 to-transparent"
                       />
                     )}
                     {isVoted && (
-                       <motion.div
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                       >
-                         <CheckCircle className="w-8 h-8 text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.8)] mb-2 relative z-10" />
-                       </motion.div>
+                      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+                        <CheckCircle className="w-7 h-7 text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.8)] relative z-10" />
+                      </motion.div>
                     )}
-                    
-                    {/* Percentage bar */}
-                    <div className="w-full bg-black/40 backdrop-blur-xl rounded-full h-2.5 overflow-hidden relative z-10 border border-white/10 shadow-[inset_0_2px_4px_rgba(0,0,0,0.4)]">
+                    <div className="w-full bg-black/40 backdrop-blur-xl rounded-full h-2 overflow-hidden relative z-10 border border-white/10">
                       <motion.div
                         initial={{ width: 0 }}
-                        animate={{ width: `${pct}%` }}
+                        animate={{ width: `${p}%` }}
                         transition={{ duration: 1, ease: 'circOut' }}
-                        className={`h-full rounded-full relative ${
-                          isVoted ? 'bg-gradient-to-r from-primary-500 to-accent-400 shadow-neon-primary' : 'bg-gray-500'
-                        }`}
-                      >
-                        {isVoted && <div className="absolute inset-0 bg-white/20 animate-glass-shine" />}
-                      </motion.div>
+                        className={`h-full rounded-full ${isVoted ? 'bg-gradient-to-r from-primary-500 to-accent-400 shadow-neon-primary' : 'bg-gray-500'}`}
+                      />
                     </div>
                     <div className="flex items-end justify-between w-full relative z-10">
-                      <motion.span 
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        className="text-white font-black text-2xl drop-shadow-md leading-none"
-                      >
-                        {pct}%
+                      <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-white font-black text-xl drop-shadow-md leading-none">
+                        {p}%
                       </motion.span>
                       <span className="text-gray-300 text-[10px] font-bold uppercase tracking-wider">
-                        {option === 'A' ? votes.A : votes.B} votes
+                        {votes[opt.letter] || 0} votes
                       </span>
                     </div>
                   </motion.div>
@@ -258,23 +270,35 @@ export default function DecisionCard({ post }) {
 
       {/* No auth nudge */}
       {!user && !showResult && (
-        <p className="text-center text-xs font-medium uppercase tracking-widest text-accent-400 -mt-2 mb-4 px-4 drop-shadow-[0_0_4px_rgba(96,165,250,0.5)]">Sign in to vote</p>
+        <p className="text-center text-xs font-medium uppercase tracking-widest text-accent-400 -mt-2 mb-4 px-4 drop-shadow-[0_0_4px_rgba(96,165,250,0.5)]">{t('signInToVote')}</p>
       )}
 
       {/* Actions */}
       <div className="flex items-center px-5 flex-wrap pb-4 gap-2 border-t border-white/5 pt-3">
+        {/* Comments */}
         <button
           onClick={() => setShowComments(!showComments)}
           className="flex items-center gap-2 text-gray-400 hover:text-white transition-all duration-300 py-1.5 px-3 rounded-xl hover:bg-white/10 text-sm font-semibold group"
-          aria-label="Toggle comments"
         >
           <MessageCircle className="w-4 h-4 group-hover:scale-110 transition-transform" />
           <span>{commentCount}</span>
           {showComments ? <ChevronUp className="w-3 h-3 text-gray-500" /> : <ChevronDown className="w-3 h-3 text-gray-500" />}
         </button>
 
+        {/* Like on Post */}
+        <motion.button
+          onClick={toggleLike}
+          whileTap={{ scale: 0.85 }}
+          className={`flex items-center gap-1.5 py-1.5 px-3 rounded-xl text-sm font-semibold transition-all duration-300 group
+            ${hasLiked ? 'text-red-400 bg-red-500/10 hover:bg-red-500/20' : 'text-gray-400 hover:text-red-400 hover:bg-red-500/10'}`}
+          aria-label="Like"
+        >
+          <Heart className={`w-4 h-4 transition-all duration-200 ${hasLiked ? 'fill-red-400 scale-110' : 'group-hover:scale-110'}`} />
+          <span>{likeCount}</span>
+        </motion.button>
+
         {total > 0 && (
-          <span className="text-xs font-bold text-gray-500 ml-2 tracking-wide uppercase">{total} votes total</span>
+          <span className="text-xs font-bold text-gray-500 ml-1 tracking-wide uppercase hidden sm:block">{t('votesTotal', { n: total })}</span>
         )}
 
         <div className="flex-1" />
@@ -282,7 +306,6 @@ export default function DecisionCard({ post }) {
         <button
           onClick={handleShare}
           className="flex items-center gap-1.5 text-gray-400 hover:text-accent-400 transition-colors py-1.5 px-3 rounded-xl hover:bg-accent-500/10 group"
-          aria-label="Share post"
         >
           <Share2 className="w-4 h-4 group-hover:scale-110 transition-transform" />
         </button>
@@ -291,7 +314,7 @@ export default function DecisionCard({ post }) {
       {/* Comments */}
       <AnimatePresence>
         {showComments && (
-          <motion.div 
+          <motion.div
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
