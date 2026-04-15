@@ -198,7 +198,7 @@ export default function DecisionCard({ post }) {
               disabled={!!userVote || voting || !user}
               className={`relative aspect-[4/5] overflow-hidden transition-all duration-500
                 ${!userVote && user ? 'cursor-pointer' : 'cursor-default'}
-                ${isOther ? 'opacity-40 grayscale-[50%]' : 'opacity-100'}
+                ${isOther ? 'opacity-70' : 'opacity-100'}
                 ${isThirdOfThree ? 'col-span-2 max-w-[50%] mx-auto w-full !aspect-square' : ''}
                 ${isFirst && !isThirdOfThree ? 'rounded-l-2xl' : ''}
                 ${isLast && !isThirdOfThree ? 'rounded-r-2xl' : ''}
