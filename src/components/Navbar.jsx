@@ -1,6 +1,6 @@
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Home, PlusSquare, User, Zap, Search } from 'lucide-react'
-import { useState, useEffect } from 'react'
+import { Home, PlusSquare, User, Zap, Search, Settings, Moon, Sun, LogOut, ChevronRight, X } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../hooks/useAuth'
 import { useLanguage } from '../contexts/LanguageContext'
@@ -11,13 +11,17 @@ import SettingsPanel from './SettingsPanel'
 export default function Navbar() {
   const location = useLocation()
   const navigate = useNavigate()
-  const { user } = useAuth()
-  const { t } = useLanguage()
+  const { user, signOut } = useAuth()
+  const { lang, t, setLanguage } = useLanguage()
 
   const [isLightMode, setIsLightMode] = useState(() => {
     return localStorage.getItem('theme') === 'light'
   })
   const [searchOpen, setSearchOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const drawerRef = useRef(null)
+
+  const isRTL = lang === 'he'
 
   useEffect(() => {
     if (isLightMode) {
@@ -29,12 +33,44 @@ export default function Navbar() {
     }
   }, [isLightMode])
 
-  // ESC to close search
+  // ESC to close search/settings
   useEffect(() => {
-    function onKey(e) { if (e.key === 'Escape') setSearchOpen(false) }
+    function onKey(e) { 
+      if (e.key === 'Escape') {
+        setSearchOpen(false)
+        setSettingsOpen(false)
+      }
+    }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [])
+
+  // Close settings on outside click
+  useEffect(() => {
+    function handleClick(e) {
+      if (settingsOpen && drawerRef.current && !drawerRef.current.contains(e.target)) {
+        // Only close if we didn't click the trigger button (handled by SettingsPanel)
+        // But since SettingsPanel is inside the header and drawer is outside, 
+        // we need to be careful. Check for data-settings-trigger or similar?
+        // Let's just check if it's not a button in the top bar.
+        if (e.target.closest('[aria-label="settings"]')) return
+        setSettingsOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [settingsOpen])
+
+  async function handleSignOut() {
+    setSettingsOpen(false)
+    await signOut()
+    navigate('/auth')
+  }
+
+  function handleNavigate(path) {
+    setSettingsOpen(false)
+    navigate(path)
+  }
 
   const links = [
     { path: '/', icon: Home, label: t('feed') },
@@ -49,13 +85,141 @@ export default function Navbar() {
         {searchOpen && <SearchBar onClose={() => setSearchOpen(false)} />}
       </AnimatePresence>
 
+      {/* Settings Drawer (Outside header to escape stacking context) */}
+      <AnimatePresence>
+        {settingsOpen && (
+          <>
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setSettingsOpen(false)}
+              className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[90]"
+            />
+
+            {/* Side Panel */}
+            <motion.div
+              ref={drawerRef}
+              initial={{ x: isRTL ? '-100%' : '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: isRTL ? '-100%' : '100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+              dir={isRTL ? 'rtl' : 'ltr'}
+              className={`fixed top-0 ${isRTL ? 'left-0' : 'right-0'} h-full w-[310px] glass-panel !rounded-none shadow-[0_0_50px_rgba(0,0,0,0.5)] ${isRTL ? 'border-r' : 'border-l'} !border-white/10 z-[100] flex flex-col`}
+            >
+              {/* Header */}
+              <div className="px-5 py-6 border-b border-white/5 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary-600 to-accent-600 flex items-center justify-center shadow-neon-primary">
+                    <Settings className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <span className="text-lg font-bold text-gray-100 block">{t('settings')}</span>
+                    <span className="text-[10px] text-gray-500 uppercase tracking-widest font-black">{t('appVersion')} 1.0</span>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setSettingsOpen(false)}
+                  className="p-2 rounded-full hover:bg-white/10 text-gray-400 hover:text-white transition-all"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+
+              {/* Scrollable Content */}
+              <div className="flex-1 overflow-y-auto custom-scrollbar p-5 space-y-8">
+                {/* User Info */}
+                {user && (
+                    <div className="p-4 rounded-2xl bg-white/5 border border-white/5">
+                        <p className="text-[10px] uppercase tracking-widest text-gray-500 font-bold mb-3">{isRTL ? 'מחובר כ' : 'Logged in as'}</p>
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-primary-500/20 flex items-center justify-center text-primary-400 font-bold border border-primary-500/20">
+                                {user.email?.[0].toUpperCase()}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <p className="text-sm font-bold text-gray-100 truncate">{user.email}</p>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Theme */}
+                <div>
+                  <p className="text-[10px] uppercase tracking-widest text-gray-500 font-bold mb-3">{t('theme')}</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      onClick={() => { if (isLightMode) setIsLightMode(false) }}
+                      className={`flex flex-col items-center justify-center gap-2 py-4 rounded-2xl text-xs font-bold transition-all duration-300 border
+                        ${!isLightMode ? 'bg-primary-600/20 border-primary-500 text-primary-300' : 'border-white/5 text-gray-500 bg-white/5'}`}
+                    >
+                      <Moon className="w-5 h-5" />
+                      {t('themeDark')}
+                    </button>
+                    <button
+                      onClick={() => { if (!isLightMode) setIsLightMode(true) }}
+                      className={`flex flex-col items-center justify-center gap-2 py-4 rounded-2xl text-xs font-bold transition-all duration-300 border
+                        ${isLightMode ? 'bg-amber-500/15 border-amber-500 text-amber-300' : 'border-white/5 text-gray-500 bg-white/5'}`}
+                    >
+                      <Sun className="w-5 h-5" />
+                      {t('themeLight')}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Language */}
+                <div>
+                  <p className="text-[10px] uppercase tracking-widest text-gray-500 font-bold mb-3">{t('language')}</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button onClick={() => setLanguage('en')} className={`flex items-center justify-center gap-2 p-3 rounded-2xl text-sm font-bold transition-all border ${lang === 'en' ? 'bg-sky-600/20 border-sky-500 text-sky-200' : 'border-white/5 text-gray-500 bg-white/5'}`}>🇺🇸 EN</button>
+                    <button onClick={() => setLanguage('he')} className={`flex items-center justify-center gap-2 p-3 rounded-2xl text-sm font-bold transition-all border ${lang === 'he' ? 'bg-blue-600/20 border-blue-500 text-blue-200' : 'border-white/5 text-gray-500 bg-white/5'}`}>🇮🇱 HE</button>
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="space-y-3 pt-4 border-t border-white/5">
+                  {user ? (
+                    <>
+                      <button onClick={() => handleNavigate('/profile')} className={`w-full flex items-center gap-4 p-4 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/5 transition-all group ${isRTL ? 'flex-row-reverse text-right' : ''}`}>
+                        <div className="w-10 h-10 rounded-xl bg-primary-500/10 flex items-center justify-center"><User className="w-5 h-5 text-primary-400" /></div>
+                        <span className="flex-1 text-base font-semibold text-gray-200 group-hover:text-white">{t('myProfile')}</span>
+                        <ChevronRight className={`w-5 h-5 text-gray-600 ${isRTL ? 'rotate-180' : ''}`} />
+                      </button>
+                      <button onClick={handleSignOut} className={`w-full flex items-center gap-4 p-4 rounded-2xl bg-red-500/5 hover:bg-red-500/10 border border-red-500/10 transition-all group ${isRTL ? 'flex-row-reverse text-right' : ''}`}>
+                        <div className="w-10 h-10 rounded-xl bg-red-500/10 flex items-center justify-center"><LogOut className="w-5 h-5 text-red-500" /></div>
+                        <span className="flex-1 text-base font-bold text-red-500">{t('signOut')}</span>
+                      </button>
+                    </>
+                  ) : (
+                    <button onClick={() => handleNavigate('/auth')} className={`w-full flex items-center gap-4 p-5 rounded-2xl bg-accent-500/10 hover:bg-accent-500/20 border border-accent-500/20 transition-all group ${isRTL ? 'flex-row-reverse text-right' : ''}`}>
+                      <div className="w-10 h-10 rounded-xl bg-accent-500/20 flex items-center justify-center"><User className="w-5 h-5 text-accent-400" /></div>
+                      <span className="flex-1 text-lg font-bold text-gray-100">{t('signIn')}</span>
+                      <ChevronRight className={`w-6 h-6 text-gray-600 ${isRTL ? 'rotate-180' : ''}`} />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="p-6 border-t border-white/5 flex flex-col gap-1 items-center bg-black/20 mt-auto">
+                <div className="flex items-center gap-2">
+                   <div className="w-5 h-5 bg-white rounded-md p-0.5"><img src="/logo.png" className="w-full h-full object-contain" /></div>
+                   <span className="text-xs font-bold text-gray-500">What2Choose</span>
+                </div>
+                <p className="text-[9px] text-gray-700 font-bold uppercase tracking-[0.2em]">{isRTL ? 'עוצב עבור מקבלי החלטות' : 'Crafted for decision makers'}</p>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
       {/* Top bar */}
       <header className="flex fixed top-0 left-0 right-0 z-50 glass-panel !rounded-none !border-x-0 !border-t-0 px-4 md:px-6 py-3 items-center justify-between">
         <button
           onClick={() => navigate('/')}
           className="flex items-center gap-2 group transition-all"
         >
-          <div className="w-8 h-8 bg-white rounded-xl flex items-center justify-center shadow-lg group-hover:shadow-neon-primary transition-all duration-300 group-hover:scale-105 p-1">
+          <div className="w-8 h-8 bg-white rounded-xl flex items-center justify-center shadow-lg transition-all duration-300 group-hover:scale-105 p-1">
             <img src="/logo.png" alt="What2Choose Logo" className="w-full h-full object-contain" />
           </div>
           <span className="text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-100 to-gray-300 tracking-tight">What2Choose</span>
@@ -66,18 +230,17 @@ export default function Navbar() {
           <button
             onClick={() => setSearchOpen(true)}
             className="p-2 rounded-xl text-gray-400 hover:text-gray-200 hover:bg-white/5 transition-all duration-200 group"
-            aria-label="Search users"
           >
             <Search className="w-5 h-5 group-hover:scale-110 transition-transform" />
           </button>
 
-          {/* Notifications (only when logged in) */}
+          {/* Notifications */}
           <NotificationsPanel />
 
-          {/* Settings hamburger (replaces sun/moon) */}
+          {/* Settings hamburger */}
           <SettingsPanel
-            isLightMode={isLightMode}
-            onToggleTheme={() => setIsLightMode(prev => !prev)}
+            open={settingsOpen}
+            onToggle={() => setSettingsOpen(!settingsOpen)}
           />
 
           {/* Desktop nav links */}
@@ -120,7 +283,6 @@ export default function Navbar() {
                   key={path}
                   onClick={() => navigate(path)}
                   className="relative -top-4 flex flex-col items-center group"
-                  aria-label={label}
                 >
                   <div className={`w-14 h-14 rounded-full flex items-center justify-center transition-all duration-300
                     ${isActive
@@ -138,7 +300,6 @@ export default function Navbar() {
                 key={path}
                 onClick={() => navigate(path)}
                 className="nav-item group"
-                aria-label={label}
               >
                 <div className="relative">
                   <Icon className={`w-6 h-6 z-10 relative transition-transform duration-300 ${isActive ? 'text-white scale-110' : 'text-gray-400 group-hover:text-gray-300'}`} />

@@ -5,4 +5,4 @@ Allow: /
 Disallow: /create
 Disallow: /profile
 
-Sitemap: https://what2choose.vercel.app/sitemap.xml
+Sitemap: https://what2-choose.vercel.app/sitemap.xml

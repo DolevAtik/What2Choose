@@ -270,7 +270,12 @@ export default function DecisionCard({ post }) {
 
       {/* No auth nudge */}
       {!user && !showResult && (
-        <p className="text-center text-xs font-medium uppercase tracking-widest text-accent-400 -mt-2 mb-4 px-4 drop-shadow-[0_0_4px_rgba(96,165,250,0.5)]">{t('signInToVote')}</p>
+        <button
+          onClick={() => navigate('/auth')}
+          className="w-full text-center text-xs font-bold uppercase tracking-widest text-accent-400 -mt-2 mb-4 px-4 drop-shadow-[0_0_4px_rgba(96,165,250,0.5)] hover:text-white hover:scale-105 transition-all duration-300"
+        >
+          {t('signInToVote')}
+        </button>
       )}
 
       {/* Actions */}

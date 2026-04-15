@@ -11,42 +11,48 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     let mounted = true
+    let loadingTimeout = null
 
-    // First: restore session from storage synchronously (Supabase v2)
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (!mounted) return
-      const currentUser = session?.user ?? null
-      setUser(currentUser)
-
-      if (currentUser) {
-        await ensureProfile(currentUser)
+    // Safety timeout: if auth takes > 5s, force clear loading state
+    loadingTimeout = setTimeout(() => {
+      if (mounted && loading) {
+        console.warn('Auth check timed out, forcing interface load.')
+        setLoading(false)
       }
-      setLoading(false)
-    })
+    }, 5000)
 
-    // Then: listen for future auth changes (sign in, sign out, token refresh)
+    // INITIALIZATION & LISTENERS
+    // In Supabase v2, onAuthStateChange fires INITIAL_SESSION synchronously or immediately after mount.
+    // We rely on this to set the initial user and profile.
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         if (!mounted) return
-        console.log('Auth event:', event, session?.user?.id)
-
+        
         const currentUser = session?.user ?? null
+        const isInitial = event === 'INITIAL_SESSION'
+        
+        console.log('Auth event:', event, currentUser?.id)
         setUser(currentUser)
 
-        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
-          if (currentUser) {
-            await ensureProfile(currentUser)
-          }
+        if (currentUser) {
+          // Only fetch profile if switching to a new user or refreshing
+          // Using a catch to ensure it doesn't block the logic
+          await ensureProfile(currentUser).catch(err => {
+            console.error('Initial profile fetch failed:', err)
+          })
         }
 
-        if (event === 'SIGNED_OUT') {
-          setProfile(null)
+        // Clear loading state on first significant event
+        if (loading) {
+          setLoading(false)
+          if (loadingTimeout) clearTimeout(loadingTimeout)
         }
       }
     )
 
     return () => {
       mounted = false
+      if (loadingTimeout) clearTimeout(loadingTimeout)
       subscription.unsubscribe()
     }
   }, [])
