@@ -6,78 +6,98 @@ export const AuthContext = createContext(null)
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [profile, setProfile] = useState(null)
+  // Start as true – we wait for Supabase to restore session before rendering
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // Safety fallback: never load longer than 5s
-    const timeout = setTimeout(() => {
-      setLoading(false)
-    }, 5000)
+    let mounted = true
 
-    // Listen for auth changes
-    // This naturally handles the initial session check in Supabase v2
+    // First: restore session from storage synchronously (Supabase v2)
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (!mounted) return
+      const currentUser = session?.user ?? null
+      setUser(currentUser)
+
+      if (currentUser) {
+        await ensureProfile(currentUser)
+      }
+      setLoading(false)
+    })
+
+    // Then: listen for future auth changes (sign in, sign out, token refresh)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
+        if (!mounted) return
         console.log('Auth event:', event, session?.user?.id)
-        
+
         const currentUser = session?.user ?? null
         setUser(currentUser)
-        
-        if (currentUser) {
-          // Check if profile exists, if not create one (crucial for Social Logins)
-          const { data: existingProfile } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', currentUser.id)
-            .single()
 
-          if (!existingProfile) {
-            console.log('No profile found, creating one for social/new user...')
-            const username = currentUser.user_metadata?.full_name || currentUser.user_metadata?.name || currentUser.email?.split('@')[0]
-            const { data: newProfile, error: createError } = await supabase
-              .from('profiles')
-              .upsert({ 
-                id: currentUser.id, 
-                username: username || 'User',
-                avatar_url: currentUser.user_metadata?.avatar_url || null
-              })
-              .select()
-              .single()
-            
-            if (createError) console.error('Failed to create initial profile:', createError)
-            setProfile(newProfile)
-          } else {
-            setProfile(existingProfile)
+        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
+          if (currentUser) {
+            await ensureProfile(currentUser)
           }
-          setLoading(false)
-        } else {
+        }
+
+        if (event === 'SIGNED_OUT') {
           setProfile(null)
-          setLoading(false)
         }
       }
     )
 
     return () => {
-      clearTimeout(timeout)
+      mounted = false
       subscription.unsubscribe()
     }
   }, [])
 
-  async function fetchProfile(userId) {
-    try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .single()
+  /** Creates a profile row if none exists, then sets it in state */
+  async function ensureProfile(currentUser) {
+    const { data: existingProfile } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', currentUser.id)
+      .single()
 
-      if (error && error.code !== 'PGRST116') {
-        console.error('Error fetching profile:', error)
-      }
-      setProfile(data)
-    } finally {
-      setLoading(false)
+    if (existingProfile) {
+      setProfile(existingProfile)
+      return existingProfile
     }
+
+    // New user (social login, etc.) – create profile
+    const username =
+      currentUser.user_metadata?.full_name ||
+      currentUser.user_metadata?.name ||
+      currentUser.email?.split('@')[0]
+
+    const { data: newProfile, error: createError } = await supabase
+      .from('profiles')
+      .upsert({
+        id: currentUser.id,
+        username: username || 'User',
+        avatar_url: currentUser.user_metadata?.avatar_url || null,
+        email: currentUser.email,
+      })
+      .select()
+      .single()
+
+    if (createError) console.error('Failed to create initial profile:', createError)
+    setProfile(newProfile)
+    return newProfile
+  }
+
+  async function fetchProfile(userId) {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', userId)
+      .single()
+
+    if (error && error.code !== 'PGRST116') {
+      console.error('Error fetching profile:', error)
+    }
+    setProfile(data)
+    return data
   }
 
   async function signUp(email, password, username) {
@@ -108,18 +128,18 @@ export function AuthProvider({ children }) {
 
   async function signOut() {
     try {
-       await supabase.auth.signOut()
+      await supabase.auth.signOut()
     } catch (err) {
-       console.error('Supabase error during signout:', err)
+      console.error('Supabase error during signout:', err)
     } finally {
-       setUser(null)
-       setProfile(null)
-       // Force wipe supabase localStorage keys in case it hangs
-       for (let key in localStorage) {
-         if (key.startsWith('sb-')) {
-           localStorage.removeItem(key)
-         }
-       }
+      setUser(null)
+      setProfile(null)
+      // Wipe any lingering auth keys
+      for (let key in localStorage) {
+        if (key.startsWith('sb-') || key.startsWith('w2c-')) {
+          localStorage.removeItem(key)
+        }
+      }
     }
   }
 

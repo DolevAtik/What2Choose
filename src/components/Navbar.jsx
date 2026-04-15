@@ -1,8 +1,10 @@
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Home, PlusSquare, User, Zap, Sun, Moon } from 'lucide-react'
+import { Home, PlusSquare, User, Zap, Sun, Moon, Search } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../hooks/useAuth'
+import SearchBar from './SearchBar'
+import NotificationsPanel from './NotificationsPanel'
 
 export default function Navbar() {
   const location = useLocation()
@@ -12,6 +14,7 @@ export default function Navbar() {
   const [isLightMode, setIsLightMode] = useState(() => {
     return localStorage.getItem('theme') === 'light'
   })
+  const [searchOpen, setSearchOpen] = useState(false)
 
   useEffect(() => {
     if (isLightMode) {
@@ -23,6 +26,13 @@ export default function Navbar() {
     }
   }, [isLightMode])
 
+  // ESC to close search
+  useEffect(() => {
+    function onKey(e) { if (e.key === 'Escape') setSearchOpen(false) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
   const toggleTheme = () => setIsLightMode(!isLightMode)
 
   const links = [
@@ -33,7 +43,12 @@ export default function Navbar() {
 
   return (
     <>
-      {/* Top bar (visible on mobile and desktop) */}
+      {/* Search Overlay */}
+      <AnimatePresence>
+        {searchOpen && <SearchBar onClose={() => setSearchOpen(false)} />}
+      </AnimatePresence>
+
+      {/* Top bar */}
       <header className="flex fixed top-0 left-0 right-0 z-50 glass-panel !rounded-none !border-x-0 !border-t-0 px-4 md:px-6 py-3 items-center justify-between">
         <button
           onClick={() => navigate('/')}
@@ -45,7 +60,20 @@ export default function Navbar() {
           <span className="text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-100 to-gray-300 tracking-tight">What2Choose</span>
         </button>
 
-        <div className="flex items-center gap-2 md:gap-4">
+        <div className="flex items-center gap-1 md:gap-2">
+          {/* Search button */}
+          <button
+            onClick={() => setSearchOpen(true)}
+            className="p-2 rounded-xl text-gray-400 hover:text-gray-200 hover:bg-white/5 transition-all duration-200 group"
+            aria-label="Search users"
+          >
+            <Search className="w-5 h-5 group-hover:scale-110 transition-transform" />
+          </button>
+
+          {/* Notifications */}
+          <NotificationsPanel />
+
+          {/* Theme toggle */}
           <button
             onClick={toggleTheme}
             className="p-2 rounded-xl text-gray-400 hover:text-gray-200 hover:bg-white/5 transition-all duration-200 group"
@@ -58,7 +86,8 @@ export default function Navbar() {
             )}
           </button>
 
-          <nav className="hidden md:flex items-center gap-2">
+          {/* Desktop nav links */}
+          <nav className="hidden md:flex items-center gap-2 ml-1">
             {links.map(({ path, icon: Icon, label }) => {
               const isActive = location.pathname === path
               return (
@@ -121,13 +150,13 @@ export default function Navbar() {
                   <Icon className={`w-6 h-6 z-10 relative transition-transform duration-300 ${isActive ? 'text-white scale-110' : 'text-gray-400 group-hover:text-gray-300'}`} />
                   {isActive && (
                     <>
-                      <motion.div 
+                      <motion.div
                         layoutId="nav-indicator"
                         className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 bg-accent-400 rounded-full shadow-neon-accent"
                       />
-                      <motion.div 
+                      <motion.div
                         layoutId="nav-glow-mobile"
-                        className="absolute inset-0 bg-primary-500/20 blur-md rounded-full -z-10" 
+                        className="absolute inset-0 bg-primary-500/20 blur-md rounded-full -z-10"
                       />
                     </>
                   )}

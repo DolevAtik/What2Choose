@@ -10,7 +10,7 @@ export default function ProfilePage() {
   const { user, profile, signOut, updateProfile } = useAuth()
 
   const [posts, setPosts] = useState([])
-  const [stats, setStats] = useState({ posts: 0, totalVotes: 0 })
+  const [stats, setStats] = useState({ posts: 0, totalVotes: 0, followers: 0, following: 0 })
   const [loading, setLoading] = useState(true)
   const [editingUsername, setEditingUsername] = useState(false)
   const [newUsername, setNewUsername] = useState('')
@@ -38,16 +38,27 @@ export default function ProfilePage() {
 
       // Get vote counts for all posts
       const postIds = userPosts.map((p) => p.id)
+      let totalVotes = 0
       if (postIds.length > 0) {
         const { count } = await supabase
           .from('votes')
           .select('*', { count: 'exact', head: true })
           .in('post_id', postIds)
-
-        setStats({ posts: userPosts.length, totalVotes: count || 0 })
-      } else {
-        setStats({ posts: 0, totalVotes: 0 })
+        totalVotes = count || 0
       }
+
+      // Followers / following counts
+      const { count: followersCount } = await supabase
+        .from('follows')
+        .select('*', { count: 'exact', head: true })
+        .eq('following_id', user.id)
+
+      const { count: followingCount } = await supabase
+        .from('follows')
+        .select('*', { count: 'exact', head: true })
+        .eq('follower_id', user.id)
+
+      setStats({ posts: userPosts.length, totalVotes, followers: followersCount || 0, following: followingCount || 0 })
     }
 
     setLoading(false)
@@ -145,20 +156,22 @@ export default function ProfilePage() {
           </div>
 
           {/* Stats */}
-          <div className="grid grid-cols-2 gap-3">
-            <div className="glass-panel !bg-primary-900/20 p-5 text-center border !border-primary-500/20 hover:shadow-neon-primary transition-all duration-300">
-              <div className="flex items-center justify-center gap-1.5 mb-2">
-                <ImageIcon className="w-5 h-5 text-primary-400" />
-              </div>
-              <p className="text-3xl font-black text-primary-300 drop-shadow-[0_0_8px_rgba(139,92,246,0.5)]">{stats.posts}</p>
-              <p className="text-[10px] uppercase tracking-widest text-primary-500 font-bold mt-1">Decisions Posted</p>
+          <div className="grid grid-cols-4 gap-2">
+            <div className="glass-panel !bg-primary-900/20 p-4 text-center border !border-primary-500/20 hover:shadow-neon-primary transition-all duration-300">
+              <p className="text-2xl font-black text-primary-300 drop-shadow-[0_0_8px_rgba(139,92,246,0.5)]">{stats.posts}</p>
+              <p className="text-[9px] uppercase tracking-widest text-primary-500 font-bold mt-1">Posts</p>
             </div>
-            <div className="glass-panel !bg-accent-900/20 p-5 text-center border !border-accent-500/20 hover:shadow-neon-accent transition-all duration-300">
-              <div className="flex items-center justify-center gap-1.5 mb-2">
-                <BarChart2 className="w-5 h-5 text-accent-400" />
-              </div>
-              <p className="text-3xl font-black text-accent-300 drop-shadow-[0_0_8px_rgba(59,130,246,0.5)]">{stats.totalVotes}</p>
-              <p className="text-[10px] uppercase tracking-widest text-accent-500 font-bold mt-1">Votes Received</p>
+            <div className="glass-panel !bg-accent-900/20 p-4 text-center border !border-accent-500/20 hover:shadow-neon-accent transition-all duration-300">
+              <p className="text-2xl font-black text-accent-300 drop-shadow-[0_0_8px_rgba(59,130,246,0.5)]">{stats.totalVotes}</p>
+              <p className="text-[9px] uppercase tracking-widest text-accent-500 font-bold mt-1">Votes</p>
+            </div>
+            <div className="glass-panel !bg-white/5 p-4 text-center border !border-white/10 hover:shadow-glass transition-all duration-300">
+              <p className="text-2xl font-black text-gray-200">{stats.followers}</p>
+              <p className="text-[9px] uppercase tracking-widest text-gray-500 font-bold mt-1">Followers</p>
+            </div>
+            <div className="glass-panel !bg-white/5 p-4 text-center border !border-white/10 hover:shadow-glass transition-all duration-300">
+              <p className="text-2xl font-black text-gray-200">{stats.following}</p>
+              <p className="text-[9px] uppercase tracking-widest text-gray-500 font-bold mt-1">Following</p>
             </div>
           </div>
         </div>

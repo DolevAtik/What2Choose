@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { MessageCircle, Share2, Heart, ChevronDown, ChevronUp, CheckCircle } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { useNavigate } from 'react-router-dom'
 import confetti from 'canvas-confetti'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
@@ -15,6 +16,7 @@ const CATEGORY_COLORS = {
 
 export default function DecisionCard({ post }) {
   const { user } = useAuth()
+  const navigate = useNavigate()
   const [userVote, setUserVote] = useState(null) // 'A' | 'B' | null
   const [votes, setVotes] = useState({ A: 0, B: 0 })
   const [showComments, setShowComments] = useState(false)
@@ -122,20 +124,25 @@ export default function DecisionCard({ post }) {
     >
       {/* Header */}
       <div className="flex items-center gap-3 p-4 pb-3 border-b border-white/5">
-        <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-primary-600 to-accent-600 flex items-center justify-center overflow-hidden shrink-0 shadow-neon-primary relative">
-          {avatarUrl ? (
-            <img src={avatarUrl} alt={authorName} className="w-full h-full object-cover" />
-          ) : (
-            <span className="text-white text-sm font-bold z-10 relative">{authorName[0]?.toUpperCase()}</span>
-          )}
-          {!avatarUrl && <div className="absolute inset-0 bg-black/20" />}
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-bold text-gray-100 truncate">{authorName}</p>
-          <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider">
-            {new Date(post.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-          </p>
-        </div>
+        <button
+          onClick={() => post.author_id && navigate(`/user/${post.author_id}`)}
+          className="flex items-center gap-3 flex-1 min-w-0 text-left group/author"
+        >
+          <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-primary-600 to-accent-600 flex items-center justify-center overflow-hidden shrink-0 shadow-neon-primary relative group-hover/author:ring-2 group-hover/author:ring-primary-400/50 transition-all">
+            {avatarUrl ? (
+              <img src={avatarUrl} alt={authorName} className="w-full h-full object-cover" />
+            ) : (
+              <span className="text-white text-sm font-bold z-10 relative">{authorName[0]?.toUpperCase()}</span>
+            )}
+            {!avatarUrl && <div className="absolute inset-0 bg-black/20" />}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-bold text-gray-100 truncate group-hover/author:text-primary-300 transition-colors">{authorName}</p>
+            <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider">
+              {new Date(post.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+            </p>
+          </div>
+        </button>
         {post.category && (
           <span className="text-[10px] font-bold uppercase tracking-wider px-3 py-1.5 rounded-full bg-surfaceHover text-primary-400 border border-primary-500/20 shadow-[0_0_10px_rgba(139,92,246,0.1)]">
             {post.category}

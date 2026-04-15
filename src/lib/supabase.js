@@ -13,5 +13,13 @@ if (!supabaseUrl || !supabaseAnonKey || supabaseUrl.includes('placeholder')) {
 
 export const supabase = createClient(
   supabaseUrl || 'https://placeholder.supabase.co',
-  supabaseAnonKey || 'placeholder-key'
+  supabaseAnonKey || 'placeholder-key',
+  {
+    auth: {
+      persistSession: true,
+      storageKey: 'w2c-auth-token',
+      detectSessionInUrl: true,
+      autoRefreshToken: true,
+    },
+  }
 )

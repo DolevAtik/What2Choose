@@ -7,6 +7,7 @@ import AuthPage from './pages/AuthPage'
 import FeedPage from './pages/FeedPage'
 import CreatePostPage from './pages/CreatePostPage'
 import ProfilePage from './pages/ProfilePage'
+import UserProfilePage from './pages/UserProfilePage'
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth()
@@ -88,6 +89,9 @@ function AppRoutes() {
             <ProtectedRoute>
               <PageWrapper><ProfilePage /></PageWrapper>
             </ProtectedRoute>
+          } />
+          <Route path="/user/:userId" element={
+            <PageWrapper><UserProfilePage /></PageWrapper>
           } />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
