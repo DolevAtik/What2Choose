@@ -66,7 +66,8 @@ export default function CreatePostPage() {
 
   async function uploadToStorage(blob, path) {
     const upload = supabase.storage.from('posts').upload(path, blob, { contentType: 'image/jpeg', upsert: true })
-    const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Upload timed out')), 20000))
+    // Increased timeout to 60s to allow for slower connections
+    const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Upload timed out')), 60000))
     const { data, error } = await Promise.race([upload, timeout])
     if (error) throw error
     const { data: { publicUrl } } = supabase.storage.from('posts').getPublicUrl(path)
@@ -88,14 +89,15 @@ export default function CreatePostPage() {
 
     try {
       const ts = Date.now()
-      const urls = []
+      
+      // Upload all images in parallel for better performance
+      setProgressMsg(t('uploading'))
+      const uploadPromises = images.map(async (file, i) => {
+        const blob = await processImage(file)
+        return uploadToStorage(blob, `${user.id}/${ts}_${OPTION_LETTERS[i].toLowerCase()}.jpg`)
+      })
 
-      for (let i = 0; i < images.length; i++) {
-        setProgressMsg(t('uploadingImage', { n: i + 1 }))
-        const blob = await processImage(images[i])
-        const url = await uploadToStorage(blob, `${user.id}/${ts}_${OPTION_LETTERS[i].toLowerCase()}.jpg`)
-        urls.push(url)
-      }
+      const urls = await Promise.all(uploadPromises)
 
       setProgressMsg(t('savingPost'))
 
