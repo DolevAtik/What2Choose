@@ -55,8 +55,8 @@ export default function Navbar() {
           onClick={() => navigate('/')}
           className="flex items-center gap-2 group transition-all"
         >
-          <div className="w-8 h-8 bg-gradient-to-tr from-primary-600 to-accent-500 rounded-xl flex items-center justify-center shadow-neon-primary group-hover:shadow-neon-accent transition-all duration-300 group-hover:scale-105">
-            <Zap className="w-4 h-4 text-white fill-white" />
+          <div className="w-8 h-8 bg-white rounded-xl flex items-center justify-center shadow-lg group-hover:shadow-neon-primary transition-all duration-300 group-hover:scale-105 p-1">
+            <img src="/logo.png" alt="What2Choose Logo" className="w-full h-full object-contain" />
           </div>
           <span className="text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-100 to-gray-300 tracking-tight">What2Choose</span>
         </button>

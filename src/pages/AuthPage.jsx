@@ -57,10 +57,10 @@ export default function AuthPage() {
       <div className="w-full max-w-md">
 
         {/* Logo / Brand */}
-        <div className="text-center mb-8 animate-fade-in">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-tr from-primary-600 to-accent-600 rounded-3xl shadow-neon-primary mb-4 relative overflow-hidden group">
-            <Zap className="w-8 h-8 text-white fill-white relative z-10 group-hover:scale-110 transition-transform duration-500" />
-            <div className="absolute inset-0 bg-white/20 animate-glass-shine" />
+        <div className="text-center mb-8 animate-fade-in flex flex-col items-center">
+          <div className="inline-flex items-center justify-center w-20 h-20 bg-white rounded-3xl shadow-[0_8px_32px_rgba(255,255,255,0.1)] mb-4 relative overflow-hidden group p-2">
+            <img src="/logo.png" alt="What2Choose Logo" className="w-full h-full object-contain relative z-10 group-hover:scale-110 transition-transform duration-500" />
+            <div className="absolute inset-0 bg-gradient-to-tr from-primary-500/10 to-accent-500/10" />
           </div>
           <h1 className="text-3xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-gray-100 to-gray-400 tracking-tight">What2Choose</h1>
           <p className="mt-2 text-primary-400 font-medium text-sm tracking-widest uppercase">Your decisions, decided by the crowd</p>

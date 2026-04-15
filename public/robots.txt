@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /
+
+# Disallow private routes
+Disallow: /create
+Disallow: /profile
+
+Sitemap: https://what2choose.vercel.app/sitemap.xml
