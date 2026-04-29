@@ -80,7 +80,7 @@ export default function ChatPage() {
       const { data: convs, error } = await supabase
         .from('conversations')
         .select(`*`)
-        .order('updated_at', { ascending: false })
+        .order('created_at', { ascending: false })
 
       if (error) {
         console.error('Error loading conversations:', error)
@@ -220,9 +220,6 @@ export default function ChatPage() {
       })
 
       if (error) throw error
-
-      // Update conversation updated_at
-      await supabase.from('conversations').update({ updated_at: new Date().toISOString() }).eq('id', selectedConv.id)
 
       // Fetch the updated messages list immediately as a fallback if Realtime is delayed
       loadMessages(selectedConv.id)

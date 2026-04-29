@@ -177,7 +177,6 @@ export default function DecisionCard({ post }) {
       if (convId) {
         const { error: msgError } = await supabase.from('messages').insert({ conversation_id: convId, sender_id: user.id, post_id: post.id })
         if (msgError) throw msgError
-        await supabase.from('conversations').update({ updated_at: new Date().toISOString() }).eq('id', convId)
       }
       
       alert('Post shared successfully!')
