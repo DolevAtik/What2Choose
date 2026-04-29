@@ -31,57 +31,58 @@ export default function FeedPage() {
 
     reset ? setLoading(true) : setLoadingMore(true)
 
-    let query = supabase
-      .from('posts')
-      .select('*, profiles(username, avatar_url, email)')
-      .order('created_at', { ascending: false })
-      .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)
+    try {
+      let query = supabase
+        .from('posts')
+        .select('*, profiles(username, avatar_url, email)')
+        .order('created_at', { ascending: false })
+        .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)
 
-    if (category !== 'All') {
-      query = query.eq('category', category)
-    }
-
-    // Following mode logic
-    if (feedMode === 'following') {
-      if (!user) {
-        // If not logged in but somehow in following mode, show empty
-        setPosts([])
-        setLoading(false)
-        setLoadingMore(false)
-        setHasMore(false)
-        return
+      if (category !== 'All') {
+        query = query.eq('category', category)
       }
-      
-      const { data: follows } = await supabase
-        .from('follows')
-        .select('following_id')
-        .eq('follower_id', user.id)
-      
-      const followingIds = (follows || []).map(f => f.following_id)
-      if (followingIds.length === 0) {
-        setPosts([])
-        setLoading(false)
-        setLoadingMore(false)
-        setHasMore(false)
-        return
+
+      // Following mode logic
+      if (feedMode === 'following') {
+        if (!user) {
+          setPosts([])
+          setHasMore(false)
+          return
+        }
+        
+        const { data: follows } = await supabase
+          .from('follows')
+          .select('following_id')
+          .eq('follower_id', user.id)
+        
+        const followingIds = (follows || []).map(f => f.following_id)
+        if (followingIds.length === 0) {
+          setPosts([])
+          setHasMore(false)
+          return
+        }
+        query = query.in('author_id', followingIds)
       }
-      query = query.in('author_id', followingIds)
-    }
 
-    const { data, error } = await query
+      const { data, error } = await query
 
-    if (!error && data) {
-      if (reset) {
-        setPosts(data)
-      } else {
-        setPosts((prev) => [...prev, ...data])
+      if (error) throw error
+
+      if (data) {
+        if (reset) {
+          setPosts(data)
+        } else {
+          setPosts((prev) => [...prev, ...data])
+        }
+        pageRef.current = page + 1
+        setHasMore(data.length === PAGE_SIZE)
       }
-      pageRef.current = page + 1
-      setHasMore(data.length === PAGE_SIZE)
+    } catch (e) {
+      console.error('fetchPosts failed:', e)
+    } finally {
+      setLoading(false)
+      setLoadingMore(false)
     }
-
-    setLoading(false)
-    setLoadingMore(false)
   }, [category, hasMore, feedMode, user])
 
   // Initial fetch and reset on category or feedMode change

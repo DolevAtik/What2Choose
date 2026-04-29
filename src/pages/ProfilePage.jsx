@@ -26,49 +26,52 @@ export default function ProfilePage() {
 
   async function fetchUserData() {
     setLoading(true)
+    try {
+      // Fetch posts
+      const { data: userPosts } = await supabase
+        .from('posts')
+        .select('*, profiles(username, avatar_url, email)')
+        .eq('author_id', user.id)
+        .order('created_at', { ascending: false })
 
-    // Fetch posts
-    const { data: userPosts } = await supabase
-      .from('posts')
-      .select('*, profiles(username, avatar_url, email)')
-      .eq('author_id', user.id)
-      .order('created_at', { ascending: false })
+      if (userPosts) {
+        setPosts(userPosts)
 
-    if (userPosts) {
-      setPosts(userPosts)
+        // Get vote counts for all posts
+        const postIds = userPosts.map((p) => p.id)
+        let totalVotes = 0
+        if (postIds.length > 0) {
+          const { count } = await supabase
+            .from('votes')
+            .select('*', { count: 'exact', head: true })
+            .in('post_id', postIds)
+          totalVotes = count || 0
+        }
 
-      // Get vote counts for all posts
-      const postIds = userPosts.map((p) => p.id)
-      let totalVotes = 0
-      if (postIds.length > 0) {
-        const { count } = await supabase
-          .from('votes')
-          .select('*', { count: 'exact', head: true })
-          .in('post_id', postIds)
-        totalVotes = count || 0
+        // Followers / following counts & lists
+        const { data: followersData } = await supabase
+          .from('follows')
+          .select('follower:profiles!follower_id(id, username, avatar_url)')
+          .eq('following_id', user.id)
+
+        const { data: followingData } = await supabase
+          .from('follows')
+          .select('following:profiles!following_id(id, username, avatar_url)')
+          .eq('follower_id', user.id)
+
+        const followersCount = followersData?.length || 0
+        const followingCount = followingData?.length || 0
+        
+        setFollowersList(followersData?.map(f => f.follower) || [])
+        setFollowingList(followingData?.map(f => f.following) || [])
+
+        setStats({ posts: userPosts.length, totalVotes, followers: followersCount, following: followingCount })
       }
-
-      // Followers / following counts & lists
-      const { data: followersData } = await supabase
-        .from('follows')
-        .select('follower:profiles!follower_id(id, username, avatar_url)')
-        .eq('following_id', user.id)
-
-      const { data: followingData } = await supabase
-        .from('follows')
-        .select('following:profiles!following_id(id, username, avatar_url)')
-        .eq('follower_id', user.id)
-
-      const followersCount = followersData?.length || 0
-      const followingCount = followingData?.length || 0
-      
-      setFollowersList(followersData?.map(f => f.follower) || [])
-      setFollowingList(followingData?.map(f => f.following) || [])
-
-      setStats({ posts: userPosts.length, totalVotes, followers: followersCount, following: followingCount })
+    } catch (e) {
+      console.error('fetchUserData failed:', e)
+    } finally {
+      setLoading(false)
     }
-
-    setLoading(false)
   }
   async function handleSignOut() {
     try {

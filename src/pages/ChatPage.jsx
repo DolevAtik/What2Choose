@@ -68,9 +68,13 @@ export default function ChatPage() {
     return () => { if (channel) supabase.removeChannel(channel) }
   }, [selectedConv?.id])
 
+  const containerRef = useRef(null)
+
   // Scroll to bottom on new message
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    if (containerRef.current) {
+      containerRef.current.scrollTop = containerRef.current.scrollHeight
+    }
   }, [messages])
 
   async function loadConversations() {
@@ -378,7 +382,7 @@ export default function ChatPage() {
               </div>
 
               {/* Messages */}
-              <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-3">
+              <div ref={containerRef} className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-3">
                 {loadingMsgs ? (
                   <div className="flex items-center justify-center h-full">
                     <span className="w-6 h-6 border-2 border-primary-500/30 border-t-primary-500 rounded-full animate-spin" />
