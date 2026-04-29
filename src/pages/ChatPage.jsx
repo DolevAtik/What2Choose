@@ -261,7 +261,7 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="h-[calc(100dvh-4rem)] pt-16 relative z-10 flex flex-col">
+    <div className="h-[calc(100dvh-4rem)] pt-16 pb-24 md:pb-0 relative z-10 flex flex-col">
       <div className="w-full max-w-4xl mx-auto flex-1 flex border border-white/5 shadow-[0_0_60px_rgba(0,0,0,0.5)] md:rounded-2xl overflow-hidden md:mt-4 md:mb-4">
 
         {/* ── Sidebar ── */}

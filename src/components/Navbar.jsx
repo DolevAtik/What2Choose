@@ -333,9 +333,8 @@ export default function Navbar() {
       </header>
 
       {/* Bottom Floating Pill (mobile) */}
-      {!location.pathname.startsWith('/chat') && (
-        <nav className="md:hidden fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-[90%] max-w-[320px]">
-          <div className="glass-panel !rounded-3xl flex items-center justify-around px-2 py-2">
+      <nav className="md:hidden fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-[90%] max-w-[320px]">
+        <div className="glass-panel !rounded-3xl flex items-center justify-around px-2 py-2">
           {links.map(({ path, icon: Icon, label, badge }) => {
             const isActive = location.pathname === path
             const isCreate = path === '/create'
@@ -389,7 +388,6 @@ export default function Navbar() {
           })}
         </div>
       </nav>
-      )}
     </>
   )
 }
