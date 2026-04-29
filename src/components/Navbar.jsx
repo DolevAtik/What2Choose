@@ -241,10 +241,9 @@ export default function Navbar() {
                 </div>
               </div>
 
-              {/* Footer */}
               <div className="p-6 border-t border-white/5 flex flex-col gap-1 items-center bg-black/20 mt-auto">
                 <div className="flex items-center gap-2">
-                   <div className="w-5 h-5 bg-white rounded-md p-0.5"><img src="/logo.jpeg" className="w-full h-full object-contain" /></div>
+                   <div className="w-6 h-6 rounded-md overflow-hidden flex items-center justify-center"><img src="/logo.jpeg" className="w-full h-full object-cover" /></div>
                    <span className="text-xs font-bold text-gray-500">What2Choose</span>
                 </div>
                 <p className="text-[9px] text-gray-700 font-bold uppercase tracking-[0.2em]">{isRTL ? 'עוצב עבור מקבלי החלטות' : 'Crafted for decision makers'}</p>
@@ -260,8 +259,8 @@ export default function Navbar() {
           onClick={() => navigate('/')}
           className="flex items-center gap-2 group transition-all"
         >
-          <div className="w-8 h-8 bg-white rounded-xl flex items-center justify-center shadow-lg transition-all duration-300 group-hover:scale-105 p-1">
-            <img src="/logo.jpeg" alt="What2Choose Logo" className="w-full h-full object-contain" />
+          <div className="w-8 h-8 rounded-xl flex items-center justify-center shadow-lg transition-all duration-300 group-hover:scale-105 overflow-hidden">
+            <img src="/logo.jpeg" alt="What2Choose Logo" className="w-full h-full object-cover" />
           </div>
           <span className="text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-100 to-gray-300 tracking-tight">What2Choose</span>
         </button>

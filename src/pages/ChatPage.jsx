@@ -54,7 +54,7 @@ export default function ChatPage() {
           if (payload.new.post_id) {
             const { data } = await supabase
               .from('messages')
-              .select('*, post:posts(id, question, option_a_url, profiles(username))')
+              .select('*, post:posts(id, question, option_a_url, author:profiles!author_id(username))')
               .eq('id', payload.new.id)
               .single()
             setMessages(prev => [...prev, data || payload.new])
@@ -105,14 +105,22 @@ export default function ChatPage() {
 
   async function loadMessages(convId) {
     try {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('messages')
-        .select('*, post:posts(id, question, option_a_url, profiles(username))')
+        .select('*, post:posts(id, question, option_a_url, author:profiles!author_id(username))')
         .eq('conversation_id', convId)
         .order('created_at', { ascending: true })
+
+      if (error) {
+        console.error('Error loading messages:', error)
+        throw error
+      }
       setMessages(data || [])
-    } catch (e) { setMessages([]) }
-    setLoadingMsgs(false)
+    } catch (e) {
+      console.error('loadMessages exception:', e)
+    } finally {
+      setLoadingMsgs(false)
+    }
   }
 
   async function openOrCreateConversation(otherUserId) {
@@ -153,16 +161,27 @@ export default function ChatPage() {
     const content = newMsg.trim()
     setNewMsg('')
 
-    await supabase.from('messages').insert({
-      conversation_id: selectedConv.id,
-      sender_id: user.id,
-      content,
-    })
+    try {
+      const { error } = await supabase.from('messages').insert({
+        conversation_id: selectedConv.id,
+        sender_id: user.id,
+        content,
+      })
 
-    // Update conversation updated_at
-    await supabase.from('conversations').update({ updated_at: new Date().toISOString() }).eq('id', selectedConv.id)
-    setSending(false)
-    inputRef.current?.focus()
+      if (error) throw error
+
+      // Update conversation updated_at
+      await supabase.from('conversations').update({ updated_at: new Date().toISOString() }).eq('id', selectedConv.id)
+
+      // Fetch the updated messages list immediately as a fallback if Realtime is delayed
+      loadMessages(selectedConv.id)
+    } catch (err) {
+      console.error('Send message error:', err)
+      alert('Error sending message: ' + err.message)
+    } finally {
+      setSending(false)
+      inputRef.current?.focus()
+    }
   }
 
   async function searchUsers(query) {
