@@ -76,10 +76,10 @@ export default function ChatPage() {
   async function loadConversations() {
     setLoadingConvs(true)
     try {
+      // 1. Fetch conversations where the user is user1 or user2 (RLS takes care of the filtering!)
       const { data: convs, error } = await supabase
         .from('conversations')
-        .select(`*, messages(content, post_id, created_at, sender_id)`)
-        .or(`user1_id.eq.${user.id},user2_id.eq.${user.id}`)
+        .select(`*`)
         .order('updated_at', { ascending: false })
 
       if (error) {
@@ -87,13 +87,16 @@ export default function ChatPage() {
         throw error
       }
 
-      if (convs) {
+      if (convs && convs.length > 0) {
         const userIds = new Set()
+        const convIds = []
         convs.forEach(c => {
+          convIds.push(c.id)
           if (c.user1_id !== user.id) userIds.add(c.user1_id)
           if (c.user2_id !== user.id) userIds.add(c.user2_id)
         })
 
+        // 2. Fetch profiles for all conversation participants
         const profilesMap = {}
         if (userIds.size > 0) {
           const { data: profiles } = await supabase
@@ -106,12 +109,32 @@ export default function ChatPage() {
           }
         }
 
+        // 3. Fetch messages for all fetched conversations
+        const messagesMap = {}
+        if (convIds.length > 0) {
+          const { data: msgs } = await supabase
+            .from('messages')
+            .select('conversation_id, content, post_id, created_at, sender_id')
+            .in('conversation_id', convIds)
+          
+          if (msgs) {
+            msgs.forEach(m => {
+              if (!messagesMap[m.conversation_id]) {
+                messagesMap[m.conversation_id] = []
+              }
+              messagesMap[m.conversation_id].push(m)
+            })
+          }
+        }
+
         const enrichedConvs = convs.map(c => {
           const otherId = c.user1_id === user.id ? c.user2_id : c.user1_id
+          const convMsgs = messagesMap[c.id] || []
           return {
             ...c,
             otherUser: profilesMap[otherId] || { id: otherId, username: 'Unknown' },
-            lastMessage: c.messages?.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0],
+            messages: convMsgs,
+            lastMessage: convMsgs.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0],
           }
         })
 
@@ -120,9 +143,12 @@ export default function ChatPage() {
           const match = enrichedConvs.find(c => c.otherUser?.id === targetUserId)
           if (match) setSelectedConv(match)
         }
+      } else {
+        setConversations([])
       }
     } catch (e) { 
       console.error('loadConversations failed:', e)
+      alert('Error loading conversations: ' + (e.message || JSON.stringify(e)))
     } finally {
       setLoadingConvs(false)
     }
