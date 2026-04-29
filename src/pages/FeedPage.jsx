@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
-import { Sparkles, Users, Globe } from 'lucide-react'
+import { Sparkles, Users, Globe, RefreshCw } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { useSearchParams } from 'react-router-dom'
@@ -100,6 +100,19 @@ export default function FeedPage() {
     localStorage.setItem('feedMode', feedMode)
   }, [feedMode])
 
+  // Auto-refresh when window regains focus
+  useEffect(() => {
+    const handleFocus = () => {
+      if (document.visibilityState === 'visible') {
+        pageRef.current = 0
+        setHasMore(true)
+        fetchPosts(true)
+      }
+    }
+    document.addEventListener('visibilitychange', handleFocus)
+    return () => document.removeEventListener('visibilitychange', handleFocus)
+  }, [fetchPosts])
+
   // Scroll to target post after load
   useEffect(() => {
     if (!targetPostId || loading) return
@@ -162,6 +175,18 @@ export default function FeedPage() {
                 Following
               </button>
             </div>
+
+            <button
+              onClick={() => {
+                pageRef.current = 0
+                setHasMore(true)
+                fetchPosts(true)
+              }}
+              className="ml-2 p-2 rounded-xl text-gray-400 hover:text-white hover:bg-white/5 transition-all"
+              title="Refresh Feed"
+            >
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-primary-400' : ''}`} />
+            </button>
           </div>
 
           {/* Category filter */}

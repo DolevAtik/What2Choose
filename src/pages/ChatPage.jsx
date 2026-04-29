@@ -76,31 +76,56 @@ export default function ChatPage() {
   async function loadConversations() {
     setLoadingConvs(true)
     try {
-      const { data, error } = await supabase
+      const { data: convs, error } = await supabase
         .from('conversations')
-        .select(`
-          *,
-          user1:profiles!conversations_user1_id_fkey(id, username, avatar_url),
-          user2:profiles!conversations_user2_id_fkey(id, username, avatar_url),
-          messages(content, post_id, created_at, sender_id)
-        `)
+        .select(`*, messages(content, post_id, created_at, sender_id)`)
         .or(`user1_id.eq.${user.id},user2_id.eq.${user.id}`)
         .order('updated_at', { ascending: false })
 
-      if (!error && data) {
-        const convs = data.map(c => ({
-          ...c,
-          otherUser: c.user1_id === user.id ? c.user2 : c.user1,
-          lastMessage: c.messages?.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0],
-        }))
-        setConversations(convs)
+      if (error) {
+        console.error('Error loading conversations:', error)
+        throw error
+      }
+
+      if (convs) {
+        const userIds = new Set()
+        convs.forEach(c => {
+          if (c.user1_id !== user.id) userIds.add(c.user1_id)
+          if (c.user2_id !== user.id) userIds.add(c.user2_id)
+        })
+
+        const profilesMap = {}
+        if (userIds.size > 0) {
+          const { data: profiles } = await supabase
+            .from('profiles')
+            .select('id, username, avatar_url')
+            .in('id', Array.from(userIds))
+          
+          if (profiles) {
+            profiles.forEach(p => { profilesMap[p.id] = p })
+          }
+        }
+
+        const enrichedConvs = convs.map(c => {
+          const otherId = c.user1_id === user.id ? c.user2_id : c.user1_id
+          return {
+            ...c,
+            otherUser: profilesMap[otherId] || { id: otherId, username: 'Unknown' },
+            lastMessage: c.messages?.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0],
+          }
+        })
+
+        setConversations(enrichedConvs)
         if (targetUserId) {
-          const match = convs.find(c => c.otherUser?.id === targetUserId)
+          const match = enrichedConvs.find(c => c.otherUser?.id === targetUserId)
           if (match) setSelectedConv(match)
         }
       }
-    } catch (e) { /* chat tables not created yet */ }
-    setLoadingConvs(false)
+    } catch (e) { 
+      console.error('loadConversations failed:', e)
+    } finally {
+      setLoadingConvs(false)
+    }
   }
 
   async function loadMessages(convId) {
