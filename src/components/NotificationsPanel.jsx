@@ -102,8 +102,10 @@ export default function NotificationsPanel() {
 
   function handleNotifClick(notif) {
     setOpen(false)
-    if (notif.post_id && notif.type !== 'follow') {
-      navigate('/')
+    if (notif.type === 'follow') {
+      if (notif.actor?.id) navigate(`/user/${notif.actor.id}`)
+    } else if (notif.post_id) {
+      navigate(`/?post=${notif.post_id}`)
     } else if (notif.actor?.id) {
       navigate(`/user/${notif.actor.id}`)
     }

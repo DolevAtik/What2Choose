@@ -1,4 +1,4 @@
-import { Menu } from 'lucide-react'
+import { Settings } from 'lucide-react'
 import { useLanguage } from '../contexts/LanguageContext'
 
 export default function SettingsPanel({ open, onToggle }) {
@@ -14,7 +14,7 @@ export default function SettingsPanel({ open, onToggle }) {
         }`}
       aria-label={t('settings')}
     >
-      <Menu className={`w-6 h-6 transition-all duration-300 ${open ? 'rotate-90 scale-110' : 'group-hover:scale-110'}`} />
+      <Settings className={`w-5 h-5 transition-all duration-300 ${open ? 'rotate-45 scale-110' : 'group-hover:rotate-45 group-hover:scale-110'}`} />
     </button>
   )
 }

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { MessageCircle, Share2, ChevronDown, ChevronUp, CheckCircle, Heart } from 'lucide-react'
+import { MessageCircle, Share2, ChevronDown, ChevronUp, CheckCircle, Heart, Send, X, Search } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import confetti from 'canvas-confetti'
@@ -25,6 +25,14 @@ export default function DecisionCard({ post }) {
   const [likeCount, setLikeCount] = useState(0)
   const [hasLiked, setHasLiked] = useState(false)
   const [liking, setLiking] = useState(false)
+  // Share
+  const [showShareMenu, setShowShareMenu] = useState(false)
+  const [shareToChat, setShareToChat] = useState(false)
+  const [chatUsers, setChatUsers] = useState([])
+  const [chatSearch, setChatSearch] = useState('')
+  const [chatSearchResults, setChatSearchResults] = useState([])
+  const [chatSending, setChatSending] = useState(false)
+  const shareMenuRef = useRef(null)
 
   const hasLoaded = useRef(false)
 
@@ -125,8 +133,50 @@ export default function DecisionCard({ post }) {
   }
 
   function handleShare() {
-    if (navigator.share) { navigator.share({ title: post.question, url: window.location.href }) }
-    else { navigator.clipboard.writeText(window.location.href) }
+    setShowShareMenu(!showShareMenu)
+  }
+
+  async function searchChatUsers(q) {
+    if (!q.trim()) { setChatSearchResults([]); return }
+    const { data } = await supabase
+      .from('profiles')
+      .select('id, username, avatar_url')
+      .ilike('username', `%${q}%`)
+      .neq('id', user?.id)
+      .limit(6)
+    setChatSearchResults(data || [])
+  }
+
+  async function sendPostToUser(targetUserId) {
+    if (!user || chatSending) return
+    setChatSending(true)
+    // Get or create conversation
+    const { data: existing } = await supabase
+      .from('conversations')
+      .select('id')
+      .or(`and(user1_id.eq.${user.id},user2_id.eq.${targetUserId}),and(user1_id.eq.${targetUserId},user2_id.eq.${user.id})`)
+      .maybeSingle()
+
+    let convId = existing?.id
+    if (!convId) {
+      const { data: newConv } = await supabase
+        .from('conversations')
+        .insert({ user1_id: user.id, user2_id: targetUserId })
+        .select('id')
+        .single()
+      convId = newConv?.id
+    }
+
+    if (convId) {
+      await supabase.from('messages').insert({ conversation_id: convId, sender_id: user.id, post_id: post.id })
+      await supabase.from('conversations').update({ updated_at: new Date().toISOString() }).eq('id', convId)
+    }
+    setChatSending(false)
+    setShowShareMenu(false)
+    setShareToChat(false)
+    setChatSearch('')
+    setChatSearchResults([])
+    navigate('/chat')
   }
 
   const authorName = post.profiles?.username || post.profiles?.email?.split('@')[0] || 'User'
@@ -232,7 +282,7 @@ export default function DecisionCard({ post }) {
                   <motion.div
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
-                    className={`absolute inset-0 flex flex-col items-center justify-end pb-4 px-3 gap-2 transition-all duration-500 ${isVoted ? 'bg-primary-900/40 backdrop-blur-[2px]' : 'bg-black/60 backdrop-blur-sm'}`}
+                    className={`absolute inset-0 flex flex-col items-center justify-end pb-4 px-3 gap-2 transition-all duration-500 ${isVoted ? 'bg-primary-900/30' : 'bg-black/40'}`}
                   >
                     {isVoted && (
                       <motion.div initial={{ opacity: 0, scale: 0 }} animate={{ opacity: 1, scale: 1 }}
@@ -308,12 +358,97 @@ export default function DecisionCard({ post }) {
 
         <div className="flex-1" />
 
-        <button
-          onClick={handleShare}
-          className="flex items-center gap-1.5 text-gray-400 hover:text-accent-400 transition-colors py-1.5 px-3 rounded-xl hover:bg-accent-500/10 group"
-        >
-          <Share2 className="w-4 h-4 group-hover:scale-110 transition-transform" />
-        </button>
+        <div className="relative" ref={shareMenuRef}>
+          <button
+            onClick={handleShare}
+            className={`flex items-center gap-1.5 text-gray-400 hover:text-accent-400 transition-colors py-1.5 px-3 rounded-xl hover:bg-accent-500/10 group
+              ${showShareMenu ? 'text-accent-400 bg-accent-500/10' : ''}`}
+          >
+            <Share2 className="w-4 h-4 group-hover:scale-110 transition-transform" />
+          </button>
+
+          <AnimatePresence>
+            {showShareMenu && (
+              <motion.div
+                initial={{ opacity: 0, y: 4, scale: 0.97 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 4, scale: 0.97 }}
+                className="absolute bottom-10 right-0 w-[220px] glass-panel !rounded-2xl overflow-hidden shadow-xl border !border-white/10 z-30"
+              >
+                {!shareToChat ? (
+                  <>
+                    <div className="px-4 pt-3 pb-1">
+                      <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Share</p>
+                    </div>
+                    {typeof navigator.share !== 'undefined' && (
+                      <button
+                        onClick={() => { navigator.share({ title: post.question, url: `${window.location.origin}/?post=${post.id}` }); setShowShareMenu(false) }}
+                        className="w-full flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-colors text-sm font-semibold text-gray-200"
+                      >
+                        <Share2 className="w-4 h-4 text-primary-400" /> Share link
+                      </button>
+                    )}
+                    <button
+                      onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/?post=${post.id}`); setShowShareMenu(false) }}
+                      className="w-full flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-colors text-sm font-semibold text-gray-200"
+                    >
+                      <Share2 className="w-4 h-4 text-accent-400" /> Copy link
+                    </button>
+                    {user && (
+                      <button
+                        onClick={() => setShareToChat(true)}
+                        className="w-full flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-colors text-sm font-semibold text-gray-200 border-t border-white/5"
+                      >
+                        <Send className="w-4 h-4 text-emerald-400" /> Send in Chat
+                      </button>
+                    )}
+                    <button onClick={() => setShowShareMenu(false)} className="absolute top-2 right-2 p-1 text-gray-600 hover:text-gray-400">
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </>
+                ) : (
+                  <div className="p-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <button onClick={() => { setShareToChat(false); setChatSearch(''); setChatSearchResults([]) }} className="text-gray-500 hover:text-gray-300">
+                        <X className="w-4 h-4" />
+                      </button>
+                      <p className="text-xs font-bold text-gray-300">Send to...</p>
+                    </div>
+                    <div className="relative">
+                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-500" />
+                      <input
+                        autoFocus
+                        value={chatSearch}
+                        onChange={e => { setChatSearch(e.target.value); searchChatUsers(e.target.value) }}
+                        placeholder="Search user..."
+                        className="w-full bg-white/5 border border-white/5 rounded-lg pl-8 pr-3 py-2 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-primary-500/50"
+                      />
+                    </div>
+                    <div className="mt-2 space-y-1 max-h-[140px] overflow-y-auto">
+                      {chatSearchResults.map(u => (
+                        <button
+                          key={u.id}
+                          onClick={() => sendPostToUser(u.id)}
+                          disabled={chatSending}
+                          className="w-full flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-white/5 transition-colors text-left"
+                        >
+                          <div className="w-7 h-7 rounded-full bg-gradient-to-br from-primary-600 to-accent-600 flex items-center justify-center text-white text-xs font-bold overflow-hidden shrink-0">
+                            {u.avatar_url ? <img src={u.avatar_url} className="w-full h-full object-cover" /> : u.username?.[0]?.toUpperCase()}
+                          </div>
+                          <span className="text-sm font-semibold text-gray-200 truncate">@{u.username}</span>
+                          {chatSending && <span className="ml-auto w-3 h-3 border border-primary-500/30 border-t-primary-500 rounded-full animate-spin" />}
+                        </button>
+                      ))}
+                      {chatSearch && chatSearchResults.length === 0 && (
+                        <p className="text-xs text-gray-600 text-center py-2">No users found</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
       </div>
 
       {/* Comments */}

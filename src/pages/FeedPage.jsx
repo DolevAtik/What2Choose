@@ -1,6 +1,8 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
-import { Sparkles } from 'lucide-react'
+import { Sparkles, Users, Globe } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { useAuth } from '../hooks/useAuth'
+import { useSearchParams } from 'react-router-dom'
 import DecisionCard from '../components/DecisionCard'
 import SkeletonCard from '../components/SkeletonCard'
 
@@ -8,14 +10,20 @@ const CATEGORIES = ['All', 'Fashion', 'Food', 'Shopping', 'Travel']
 const PAGE_SIZE = 10
 
 export default function FeedPage() {
+  const { user } = useAuth()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const targetPostId = searchParams.get('post')
+
   const [posts, setPosts] = useState([])
   const [category, setCategory] = useState('All')
+  const [feedMode, setFeedMode] = useState(() => localStorage.getItem('feedMode') || 'global') // 'global' | 'following'
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [hasMore, setHasMore] = useState(true)
   const pageRef = useRef(0)
   const observerRef = useRef(null)
   const sentinelRef = useRef(null)
+  const postRefs = useRef({})
 
   const fetchPosts = useCallback(async (reset = false) => {
     const page = reset ? 0 : pageRef.current
@@ -33,6 +41,33 @@ export default function FeedPage() {
       query = query.eq('category', category)
     }
 
+    // Following mode logic
+    if (feedMode === 'following') {
+      if (!user) {
+        // If not logged in but somehow in following mode, show empty
+        setPosts([])
+        setLoading(false)
+        setLoadingMore(false)
+        setHasMore(false)
+        return
+      }
+      
+      const { data: follows } = await supabase
+        .from('follows')
+        .select('following_id')
+        .eq('follower_id', user.id)
+      
+      const followingIds = (follows || []).map(f => f.following_id)
+      if (followingIds.length === 0) {
+        setPosts([])
+        setLoading(false)
+        setLoadingMore(false)
+        setHasMore(false)
+        return
+      }
+      query = query.in('author_id', followingIds)
+    }
+
     const { data, error } = await query
 
     if (!error && data) {
@@ -47,14 +82,37 @@ export default function FeedPage() {
 
     setLoading(false)
     setLoadingMore(false)
-  }, [category, hasMore])
+  }, [category, hasMore, feedMode, user])
 
-  // Reset on category change
+  // Initial fetch and reset on category or feedMode change
   useEffect(() => {
+    // If in following mode but user hasn't loaded yet from auth, wait.
+    // If in global mode, load instantly!
+    if (feedMode === 'following' && user === undefined) return
+    
     pageRef.current = 0
     setHasMore(true)
     fetchPosts(true)
-  }, [category])
+  }, [category, feedMode, user])
+
+  // Save feedMode preference
+  useEffect(() => {
+    localStorage.setItem('feedMode', feedMode)
+  }, [feedMode])
+
+  // Scroll to target post after load
+  useEffect(() => {
+    if (!targetPostId || loading) return
+    const el = postRefs.current[targetPostId]
+    if (el) {
+      setTimeout(() => {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        el.classList.add('ring-2', 'ring-primary-500', 'ring-offset-2', 'ring-offset-gray-950')
+        setTimeout(() => el.classList.remove('ring-2', 'ring-primary-500', 'ring-offset-2', 'ring-offset-gray-950'), 3000)
+        setSearchParams({}, { replace: true })
+      }, 300)
+    }
+  }, [targetPostId, loading, posts])
 
   // Infinite scroll observer
   useEffect(() => {
@@ -78,9 +136,32 @@ export default function FeedPage() {
       {/* Page header */}
       <div className="sticky top-[60px] md:top-16 z-40 glass-panel !rounded-none !border-x-0 !border-t-0 shadow-glass">
         <div className="max-w-lg mx-auto px-4 py-3">
-          <div className="flex items-center gap-2 mb-3">
-            <Sparkles className="w-5 h-5 text-primary-500 drop-shadow-[0_0_8px_rgba(139,92,246,0.6)]" />
-            <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-100 to-gray-400 tracking-tight">Feed</h1>
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-primary-500 drop-shadow-[0_0_8px_rgba(139,92,246,0.6)]" />
+              <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-100 to-gray-400 tracking-tight">Feed</h1>
+            </div>
+            {/* Following / Global toggle */}
+            <div className="flex items-center gap-1 p-1 rounded-xl bg-white/5 border border-white/5">
+              <button
+                onClick={() => setFeedMode('global')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all duration-200
+                  ${feedMode === 'global' ? 'bg-primary-600 text-white shadow-neon-primary' : 'text-gray-400 hover:text-gray-200'}`}
+              >
+                <Globe className="w-3.5 h-3.5" />
+                All
+              </button>
+              <button
+                onClick={() => setFeedMode('following')}
+                disabled={!user}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all duration-200
+                  ${feedMode === 'following' ? 'bg-primary-600 text-white shadow-neon-primary' : 'text-gray-400 hover:text-gray-200'}
+                  ${!user ? 'opacity-40 cursor-not-allowed' : ''}`}
+              >
+                <Users className="w-3.5 h-3.5" />
+                Following
+              </button>
+            </div>
           </div>
 
           {/* Category filter */}
@@ -109,10 +190,12 @@ export default function FeedPage() {
             <SkeletonCard key={i} />
           ))
         ) : posts.length === 0 ? (
-          <EmptyState category={category} />
+          <EmptyState category={category} feedMode={feedMode} />
         ) : (
           posts.map((post) => (
-            <DecisionCard key={post.id} post={post} />
+            <div key={post.id} ref={el => postRefs.current[post.id] = el} className="transition-all duration-700 rounded-2xl">
+              <DecisionCard post={post} />
+            </div>
           ))
         )}
 
@@ -135,15 +218,19 @@ export default function FeedPage() {
   )
 }
 
-function EmptyState({ category }) {
+function EmptyState({ category, feedMode }) {
   return (
     <div className="text-center py-20 animate-fade-in glass-panel !rounded-3xl border-dashed border-2 border-white/10">
-      <div className="text-5xl mb-4 drop-shadow-[0_0_15px_rgba(255,255,255,0.2)]">👻</div>
-      <h3 className="text-lg font-bold text-gray-200 mb-1">No decisions yet</h3>
+      <div className="text-5xl mb-4 drop-shadow-[0_0_15px_rgba(255,255,255,0.2)]">{feedMode === 'following' ? '👥' : '👻'}</div>
+      <h3 className="text-lg font-bold text-gray-200 mb-1">
+        {feedMode === 'following' ? 'No posts from people you follow' : 'No decisions yet'}
+      </h3>
       <p className="text-sm text-gray-500 font-medium tracking-wide">
-        {category !== 'All'
-          ? `No posts in ${category} yet. Be the first!`
-          : 'Be the first to post a decision!'}
+        {feedMode === 'following'
+          ? 'Follow people to see their posts here'
+          : category !== 'All'
+            ? `No posts in ${category} yet. Be the first!`
+            : 'Be the first to post a decision!'}
       </p>
     </div>
   )

@@ -1,9 +1,10 @@
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Home, PlusSquare, User, Zap, Search, Settings, Moon, Sun, LogOut, ChevronRight, X } from 'lucide-react'
+import { Home, PlusSquare, User, Zap, Search, Settings, Moon, Sun, LogOut, ChevronRight, X, MessageCircle } from 'lucide-react'
 import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../hooks/useAuth'
 import { useLanguage } from '../contexts/LanguageContext'
+import { supabase } from '../lib/supabase'
 import SearchBar from './SearchBar'
 import NotificationsPanel from './NotificationsPanel'
 import SettingsPanel from './SettingsPanel'
@@ -19,6 +20,7 @@ export default function Navbar() {
   })
   const [searchOpen, setSearchOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [unreadMessages, setUnreadMessages] = useState(0)
   const drawerRef = useRef(null)
 
   const isRTL = lang === 'he'
@@ -44,6 +46,45 @@ export default function Navbar() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [])
+
+  // Unread messages count
+  useEffect(() => {
+    if (!user) return
+    let channel = null
+
+    async function loadUnread() {
+      try {
+        const { data: convs } = await supabase
+          .from('conversations')
+          .select('id')
+          .or(`user1_id.eq.${user.id},user2_id.eq.${user.id}`)
+        if (!convs?.length) return
+        const convIds = convs.map(c => c.id)
+        const { count } = await supabase
+          .from('messages')
+          .select('*', { count: 'exact', head: true })
+          .in('conversation_id', convIds)
+          .neq('sender_id', user.id)
+          .eq('read', false)
+        setUnreadMessages(count || 0)
+      } catch (e) { /* chat tables not created yet */ }
+    }
+    loadUnread()
+
+    try {
+      channel = supabase
+        .channel(`chat-unread-${user.id}`)
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' },
+          (payload) => {
+            if (payload.new.sender_id !== user.id) {
+              setUnreadMessages(prev => prev + 1)
+            }
+          })
+        .subscribe()
+    } catch (e) { /* chat tables not created yet */ }
+
+    return () => { if (channel) supabase.removeChannel(channel) }
+  }, [user])
 
   // Close settings on outside click
   useEffect(() => {
@@ -75,6 +116,7 @@ export default function Navbar() {
   const links = [
     { path: '/', icon: Home, label: t('feed') },
     { path: '/create', icon: PlusSquare, label: 'Create', requireAuth: true },
+    { path: '/chat', icon: MessageCircle, label: 'Chat', requireAuth: true, badge: unreadMessages > 0 ? unreadMessages : null },
     { path: user ? '/profile' : '/auth', icon: User, label: user ? t('myProfile') : t('signIn') },
   ]
 
@@ -234,6 +276,21 @@ export default function Navbar() {
             <Search className="w-5 h-5 group-hover:scale-110 transition-transform" />
           </button>
 
+          {/* Chat (mobile header shortcut) */}
+          {user && (
+            <button
+              onClick={() => { navigate('/chat'); setUnreadMessages(0) }}
+              className="relative p-2 rounded-xl text-gray-400 hover:text-gray-200 hover:bg-white/5 transition-all duration-200 group"
+            >
+              <MessageCircle className="w-5 h-5 group-hover:scale-110 transition-transform" />
+              {unreadMessages > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 bg-gradient-to-br from-emerald-500 to-primary-500 rounded-full text-[10px] font-black text-white flex items-center justify-center shadow-neon-primary">
+                  {unreadMessages > 9 ? '9+' : unreadMessages}
+                </span>
+              )}
+            </button>
+          )}
+
           {/* Notifications */}
           <NotificationsPanel />
 
@@ -245,12 +302,12 @@ export default function Navbar() {
 
           {/* Desktop nav links */}
           <nav className="hidden md:flex items-center gap-2 ml-1">
-            {links.map(({ path, icon: Icon, label }) => {
-              const isActive = location.pathname === path
+            {links.map(({ path, icon: Icon, label, badge }) => {
+              const isActive = location.pathname === path || (path === '/chat' && location.pathname.startsWith('/chat'))
               return (
                 <button
                   key={path}
-                  onClick={() => navigate(path)}
+                  onClick={() => { navigate(path); if (path === '/chat') setUnreadMessages(0) }}
                   className={`relative flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all duration-300
                     ${isActive ? 'text-white' : 'text-gray-400 hover:text-gray-200'}`}
                 >
@@ -261,7 +318,14 @@ export default function Navbar() {
                       transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
                     />
                   )}
-                  <Icon className={`w-4 h-4 relative z-10 ${isActive ? 'drop-shadow-[0_0_8px_rgba(255,255,255,0.4)]' : ''}`} />
+                  <div className="relative">
+                    <Icon className={`w-4 h-4 relative z-10 ${isActive ? 'drop-shadow-[0_0_8px_rgba(255,255,255,0.4)]' : ''}`} />
+                    {badge && (
+                      <span className="absolute -top-1.5 -right-1.5 min-w-[14px] h-[14px] px-0.5 bg-gradient-to-br from-emerald-500 to-primary-500 rounded-full text-[8px] font-black text-white flex items-center justify-center">
+                        {badge > 9 ? '9+' : badge}
+                      </span>
+                    )}
+                  </div>
                   <span className="relative z-10">{label}</span>
                 </button>
               )
@@ -273,7 +337,7 @@ export default function Navbar() {
       {/* Bottom Floating Pill (mobile) */}
       <nav className="md:hidden fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-[90%] max-w-[320px]">
         <div className="glass-panel !rounded-3xl flex items-center justify-around px-2 py-2">
-          {links.map(({ path, icon: Icon, label }) => {
+          {links.map(({ path, icon: Icon, label, badge }) => {
             const isActive = location.pathname === path
             const isCreate = path === '/create'
 
@@ -298,11 +362,16 @@ export default function Navbar() {
             return (
               <button
                 key={path}
-                onClick={() => navigate(path)}
+                onClick={() => { navigate(path); if (path === '/chat') setUnreadMessages(0) }}
                 className="nav-item group"
               >
                 <div className="relative">
                   <Icon className={`w-6 h-6 z-10 relative transition-transform duration-300 ${isActive ? 'text-white scale-110' : 'text-gray-400 group-hover:text-gray-300'}`} />
+                  {badge && (
+                    <span className="absolute -top-1 -right-1 min-w-[14px] h-[14px] px-0.5 bg-gradient-to-br from-emerald-500 to-primary-500 rounded-full text-[8px] font-black text-white flex items-center justify-center">
+                      {badge > 9 ? '9+' : badge}
+                    </span>
+                  )}
                   {isActive && (
                     <>
                       <motion.div

@@ -1,13 +1,16 @@
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
+import { Suspense, lazy } from 'react'
 import { AuthProvider } from './contexts/AuthContext'
 import { useAuth } from './hooks/useAuth'
 import Navbar from './components/Navbar'
-import AuthPage from './pages/AuthPage'
-import FeedPage from './pages/FeedPage'
-import CreatePostPage from './pages/CreatePostPage'
-import ProfilePage from './pages/ProfilePage'
-import UserProfilePage from './pages/UserProfilePage'
+
+const AuthPage = lazy(() => import('./pages/AuthPage'))
+const FeedPage = lazy(() => import('./pages/FeedPage'))
+const CreatePostPage = lazy(() => import('./pages/CreatePostPage'))
+const ProfilePage = lazy(() => import('./pages/ProfilePage'))
+const UserProfilePage = lazy(() => import('./pages/UserProfilePage'))
+const ChatPage = lazy(() => import('./pages/ChatPage'))
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth()
@@ -49,21 +52,8 @@ function PageWrapper({ children }) {
 }
 
 function AppRoutes() {
-  const { user, loading } = useAuth()
+  const { user } = useAuth()
   const location = useLocation()
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-950">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-14 h-14 bg-gradient-to-tr from-primary-600 to-accent-600 rounded-2xl flex items-center justify-center shadow-neon-primary animate-pulse-glow">
-            <span className="text-white text-2xl">⚡</span>
-          </div>
-          <span className="w-5 h-5 border-2 border-primary-500/30 border-t-primary-500 rounded-full animate-spin" />
-        </div>
-      </div>
-    )
-  }
 
   return (
     <>
@@ -72,30 +62,51 @@ function AppRoutes() {
         {location.pathname !== '/auth' && <Navbar />}
       </AnimatePresence>
 
-      <AnimatePresence mode="wait">
-        <Routes location={location} key={location.pathname}>
-          <Route path="/auth" element={
-            <PageWrapper>
-              {user ? <Navigate to="/" replace /> : <AuthPage />}
-            </PageWrapper>
-          } />
-          <Route path="/" element={<PageWrapper><FeedPage /></PageWrapper>} />
-          <Route path="/create" element={
-            <ProtectedRoute>
-              <PageWrapper><CreatePostPage /></PageWrapper>
-            </ProtectedRoute>
-          } />
-          <Route path="/profile" element={
-            <ProtectedRoute>
-              <PageWrapper><ProfilePage /></PageWrapper>
-            </ProtectedRoute>
-          } />
-          <Route path="/user/:userId" element={
-            <PageWrapper><UserProfilePage /></PageWrapper>
-          } />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </AnimatePresence>
+      <Suspense fallback={
+        <div className="min-h-screen flex items-center justify-center bg-gray-950">
+          <div className="flex flex-col items-center gap-4">
+            <div className="w-14 h-14 bg-gradient-to-tr from-primary-600 to-accent-600 rounded-2xl flex items-center justify-center shadow-neon-primary animate-pulse-glow">
+              <span className="text-white text-2xl">⚡</span>
+            </div>
+            <span className="w-5 h-5 border-2 border-primary-500/30 border-t-primary-500 rounded-full animate-spin" />
+          </div>
+        </div>
+      }>
+        <AnimatePresence mode="wait">
+          <Routes location={location} key={location.pathname}>
+            <Route path="/auth" element={
+              <PageWrapper>
+                {user ? <Navigate to="/" replace /> : <AuthPage />}
+              </PageWrapper>
+            } />
+            <Route path="/" element={<PageWrapper><FeedPage /></PageWrapper>} />
+            <Route path="/create" element={
+              <ProtectedRoute>
+                <PageWrapper><CreatePostPage /></PageWrapper>
+              </ProtectedRoute>
+            } />
+            <Route path="/profile" element={
+              <ProtectedRoute>
+                <PageWrapper><ProfilePage /></PageWrapper>
+              </ProtectedRoute>
+            } />
+            <Route path="/user/:userId" element={
+              <PageWrapper><UserProfilePage /></PageWrapper>
+            } />
+            <Route path="/chat" element={
+              <ProtectedRoute>
+                <PageWrapper><ChatPage /></PageWrapper>
+              </ProtectedRoute>
+            } />
+            <Route path="/chat/:userId" element={
+              <ProtectedRoute>
+                <PageWrapper><ChatPage /></PageWrapper>
+              </ProtectedRoute>
+            } />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </AnimatePresence>
+      </Suspense>
     </>
   )
 }

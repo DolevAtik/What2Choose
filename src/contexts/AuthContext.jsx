@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase'
 export const AuthContext = createContext(null)
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null)
+  const [user, setUser] = useState(undefined)
   const [profile, setProfile] = useState(null)
   // Start as true – we wait for Supabase to restore session before rendering
   const [loading, setLoading] = useState(true)
