@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { MessageCircle, Share2, ChevronDown, ChevronUp, CheckCircle, Heart, Send, X, Search } from 'lucide-react'
+import { MessageCircle, Share2, ChevronDown, ChevronUp, CheckCircle, Heart, Send, X, Search, Trash2 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import confetti from 'canvas-confetti'
@@ -32,6 +32,8 @@ export default function DecisionCard({ post }) {
   const [chatSearch, setChatSearch] = useState('')
   const [chatSearchResults, setChatSearchResults] = useState([])
   const [chatSending, setChatSending] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [isDeleted, setIsDeleted] = useState(false)
   const shareMenuRef = useRef(null)
 
   const hasLoaded = useRef(false)
@@ -150,33 +152,58 @@ export default function DecisionCard({ post }) {
   async function sendPostToUser(targetUserId) {
     if (!user || chatSending) return
     setChatSending(true)
-    // Get or create conversation
-    const { data: existing } = await supabase
-      .from('conversations')
-      .select('id')
-      .or(`and(user1_id.eq.${user.id},user2_id.eq.${targetUserId}),and(user1_id.eq.${targetUserId},user2_id.eq.${user.id})`)
-      .maybeSingle()
-
-    let convId = existing?.id
-    if (!convId) {
-      const { data: newConv } = await supabase
+    try {
+      // Get or create conversation
+      const { data: existing, error: existError } = await supabase
         .from('conversations')
-        .insert({ user1_id: user.id, user2_id: targetUserId })
         .select('id')
-        .single()
-      convId = newConv?.id
-    }
+        .or(`and(user1_id.eq.${user.id},user2_id.eq.${targetUserId}),and(user1_id.eq.${targetUserId},user2_id.eq.${user.id})`)
+        .maybeSingle()
 
-    if (convId) {
-      await supabase.from('messages').insert({ conversation_id: convId, sender_id: user.id, post_id: post.id })
-      await supabase.from('conversations').update({ updated_at: new Date().toISOString() }).eq('id', convId)
+      if (existError) throw existError
+
+      let convId = existing?.id
+      if (!convId) {
+        const { data: newConv, error: newConvError } = await supabase
+          .from('conversations')
+          .insert({ user1_id: user.id, user2_id: targetUserId })
+          .select('id')
+          .single()
+        
+        if (newConvError) throw newConvError
+        convId = newConv?.id
+      }
+
+      if (convId) {
+        const { error: msgError } = await supabase.from('messages').insert({ conversation_id: convId, sender_id: user.id, post_id: post.id })
+        if (msgError) throw msgError
+        await supabase.from('conversations').update({ updated_at: new Date().toISOString() }).eq('id', convId)
+      }
+      
+      alert('Post shared successfully!')
+    } catch (err) {
+      console.error('Chat share error:', err)
+      alert('Error sharing post: ' + err.message)
+    } finally {
+      setChatSending(false)
+      setShowShareMenu(false)
+      setShareToChat(false)
+      setChatSearch('')
+      setChatSearchResults([])
     }
-    setChatSending(false)
-    setShowShareMenu(false)
-    setShareToChat(false)
-    setChatSearch('')
-    setChatSearchResults([])
-    navigate('/chat')
+  }
+
+  async function handleDeletePost() {
+    if (!window.confirm('Are you sure you want to delete this post?')) return
+    setIsDeleting(true)
+    try {
+      await supabase.from('posts').delete().eq('id', post.id)
+      setIsDeleted(true)
+    } catch (err) {
+      console.error('Error deleting post:', err)
+      alert('Failed to delete post.')
+      setIsDeleting(false)
+    }
   }
 
   const authorName = post.profiles?.username || post.profiles?.email?.split('@')[0] || 'User'
@@ -188,6 +215,8 @@ export default function DecisionCard({ post }) {
     : optionCount === 3
       ? 'grid-cols-2'
       : 'grid-cols-2'
+
+  if (isDeleted) return null
 
   return (
     <motion.article
@@ -221,6 +250,16 @@ export default function DecisionCard({ post }) {
           <span className="text-[10px] font-bold uppercase tracking-wider px-3 py-1.5 rounded-full bg-surfaceHover text-primary-400 border border-primary-500/20 shadow-[0_0_10px_rgba(139,92,246,0.1)] shrink-0">
             {post.category}
           </span>
+        )}
+        {user?.id === post.author_id && (
+          <button
+            onClick={handleDeletePost}
+            disabled={isDeleting}
+            className="p-2 rounded-full text-gray-500 hover:text-red-500 hover:bg-red-500/10 transition-all shrink-0"
+            title="Delete post"
+          >
+            {isDeleting ? <span className="w-4 h-4 border-2 border-red-500/30 border-t-red-500 rounded-full animate-spin block" /> : <Trash2 className="w-4 h-4" />}
+          </button>
         )}
       </div>
 

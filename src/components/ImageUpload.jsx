@@ -1,16 +1,11 @@
 import { useCallback, useRef, useState } from 'react'
-import { Upload, X, Camera } from 'lucide-react'
+import { Upload, X } from 'lucide-react'
 import { useLanguage } from '../contexts/LanguageContext'
 
 export default function ImageUpload({ label, value, onChange, id }) {
   const { t } = useLanguage()
   const [dragging, setDragging] = useState(false)
-  const [cameraError, setCameraError] = useState('')
   const fileInputRef = useRef(null)
-  const cameraInputRef = useRef(null)
-  const videoRef = useRef(null)
-  const [showCamera, setShowCamera] = useState(false)
-  const [stream, setStream] = useState(null)
 
   const handleFile = useCallback((file) => {
     if (!file) return
@@ -35,104 +30,9 @@ export default function ImageUpload({ label, value, onChange, id }) {
     e.stopPropagation()
     onChange(null)
     if (fileInputRef.current) fileInputRef.current.value = ''
-    if (cameraInputRef.current) cameraInputRef.current.value = ''
-    stopCamera()
-  }
-
-  // ─── Camera (getUserMedia for desktop, input capture for mobile) ──────────
-
-  function isMobile() {
-    return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
-  }
-
-  function openCamera(e) {
-    e.stopPropagation()
-    setCameraError('')
-    if (isMobile()) {
-      // On mobile: native camera input is the smoothest UX
-      cameraInputRef.current?.click()
-    } else {
-      // On desktop: getUserMedia with preview
-      startDesktopCamera()
-    }
-  }
-
-  async function startDesktopCamera() {
-    try {
-      const mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
-      })
-      setStream(mediaStream)
-      setShowCamera(true)
-      // Give React time to render <video> before assigning srcObject
-      requestAnimationFrame(() => {
-        if (videoRef.current) {
-          videoRef.current.srcObject = mediaStream
-        }
-      })
-    } catch (err) {
-      console.error('Camera error:', err)
-      setCameraError('Camera not accessible. Check browser permissions.')
-    }
-  }
-
-  function stopCamera() {
-    stream?.getTracks().forEach(t => t.stop())
-    setStream(null)
-    setShowCamera(false)
-  }
-
-  function capturePhoto(e) {
-    e.stopPropagation()
-    if (!videoRef.current) return
-    const canvas = document.createElement('canvas')
-    canvas.width = videoRef.current.videoWidth
-    canvas.height = videoRef.current.videoHeight
-    canvas.getContext('2d').drawImage(videoRef.current, 0, 0)
-    canvas.toBlob((blob) => {
-      if (blob) {
-        const file = new File([blob], 'camera_photo.jpg', { type: 'image/jpeg' })
-        onChange(file)
-        stopCamera()
-      }
-    }, 'image/jpeg', 0.9)
   }
 
   const preview = value ? URL.createObjectURL(value) : null
-
-  // ─── Camera Preview Overlay ────────────────────────────────────────────────
-  if (showCamera) {
-    return (
-      <div className="flex flex-col gap-2">
-        {label && <label className="text-xs font-bold text-gray-400 uppercase tracking-widest">{label}</label>}
-        <div className="relative aspect-square rounded-2xl overflow-hidden bg-black border border-white/10">
-          <video
-            ref={videoRef}
-            autoPlay
-            playsInline
-            muted
-            className="w-full h-full object-cover"
-          />
-          <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-3 px-3">
-            <button
-              type="button"
-              onClick={(e) => { e.stopPropagation(); stopCamera() }}
-              className="flex-1 py-2.5 rounded-xl bg-black/60 border border-white/10 text-gray-300 text-xs font-bold backdrop-blur-sm hover:bg-black/80 transition-colors"
-            >
-              ✕ Cancel
-            </button>
-            <button
-              type="button"
-              onClick={capturePhoto}
-              className="flex-1 py-2.5 rounded-xl bg-primary-600 text-white text-xs font-bold hover:bg-primary-500 transition-colors shadow-neon-primary"
-            >
-              📸 Capture
-            </button>
-          </div>
-        </div>
-      </div>
-    )
-  }
 
   // ─── Main Upload UI ────────────────────────────────────────────────────────
   return (
@@ -169,26 +69,12 @@ export default function ImageUpload({ label, value, onChange, id }) {
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className={`w-full flex flex-col items-center gap-2 p-3 rounded-xl transition-all duration-200
+              className={`w-full flex flex-col items-center gap-2 p-4 rounded-xl transition-all duration-200
                 ${dragging ? 'bg-primary-500/20' : 'bg-surface hover:bg-surfaceHover border border-white/5 hover:border-white/10'}`}
             >
-              <Upload className={`w-5 h-5 ${dragging ? 'text-primary-400' : 'text-gray-400'}`} />
-              <span className="text-[11px] text-gray-400 font-semibold">{dragging ? t('dropHere') : t('clickToUpload')}</span>
+              <Upload className={`w-6 h-6 ${dragging ? 'text-primary-400' : 'text-gray-400'}`} />
+              <span className="text-[12px] text-gray-400 font-semibold">{dragging ? t('dropHere') : t('clickToUpload')}</span>
             </button>
-
-            {/* Camera button */}
-            <button
-              type="button"
-              onClick={openCamera}
-              className="w-full flex flex-col items-center gap-1.5 p-2.5 rounded-xl bg-surface hover:bg-surfaceHover border border-white/5 hover:border-primary-500/30 transition-all duration-200 group"
-            >
-              <Camera className="w-4 h-4 text-gray-500 group-hover:text-primary-400 transition-colors" />
-              <span className="text-[10px] text-gray-500 group-hover:text-gray-300 font-semibold transition-colors">{t('orTakePhoto')}</span>
-            </button>
-
-            {cameraError && (
-              <p className="text-[10px] text-red-400 text-center px-1">{cameraError}</p>
-            )}
             <p className="text-[9px] text-gray-600 uppercase tracking-wider font-semibold">{t('maxSize')}</p>
           </div>
         )}
@@ -200,17 +86,6 @@ export default function ImageUpload({ label, value, onChange, id }) {
         type="file"
         accept="image/*"
         onChange={(e) => handleFile(e.target.files?.[0])}
-        className="hidden"
-        aria-hidden="true"
-      />
-
-      {/* Camera input (mobile native) */}
-      <input
-        ref={cameraInputRef}
-        type="file"
-        accept="image/*"
-        capture="environment"
-        onChange={(e) => { handleFile(e.target.files?.[0]); e.target.value = '' }}
         className="hidden"
         aria-hidden="true"
       />

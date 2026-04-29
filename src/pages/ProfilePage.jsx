@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { LogOut, Settings, BarChart2, Image as ImageIcon, Edit3 } from 'lucide-react'
+import { LogOut, Settings, BarChart2, Image as ImageIcon, Edit3, X, User as UserIcon } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import DecisionCard from '../components/DecisionCard'
@@ -11,10 +11,11 @@ export default function ProfilePage() {
 
   const [posts, setPosts] = useState([])
   const [stats, setStats] = useState({ posts: 0, totalVotes: 0, followers: 0, following: 0 })
+  const [followersList, setFollowersList] = useState([])
+  const [followingList, setFollowingList] = useState([])
+  const [showModal, setShowModal] = useState(null) // 'followers' | 'following' | null
   const [loading, setLoading] = useState(true)
-  const [editingUsername, setEditingUsername] = useState(false)
-  const [newUsername, setNewUsername] = useState('')
-  const [savingName, setSavingName] = useState(false)
+  const [uploadingAvatar, setUploadingAvatar] = useState(false)
 
   useEffect(() => {
     if (user) fetchUserData()
@@ -47,23 +48,28 @@ export default function ProfilePage() {
         totalVotes = count || 0
       }
 
-      // Followers / following counts
-      const { count: followersCount } = await supabase
+      // Followers / following counts & lists
+      const { data: followersData } = await supabase
         .from('follows')
-        .select('*', { count: 'exact', head: true })
+        .select('follower:profiles!follower_id(id, username, avatar_url)')
         .eq('following_id', user.id)
 
-      const { count: followingCount } = await supabase
+      const { data: followingData } = await supabase
         .from('follows')
-        .select('*', { count: 'exact', head: true })
+        .select('following:profiles!following_id(id, username, avatar_url)')
         .eq('follower_id', user.id)
 
-      setStats({ posts: userPosts.length, totalVotes, followers: followersCount || 0, following: followingCount || 0 })
+      const followersCount = followersData?.length || 0
+      const followingCount = followingData?.length || 0
+      
+      setFollowersList(followersData?.map(f => f.follower) || [])
+      setFollowingList(followingData?.map(f => f.following) || [])
+
+      setStats({ posts: userPosts.length, totalVotes, followers: followersCount, following: followingCount })
     }
 
     setLoading(false)
   }
-
   async function handleSignOut() {
     try {
       await signOut()
@@ -73,16 +79,33 @@ export default function ProfilePage() {
     }
   }
 
-  async function saveUsername() {
-    if (!newUsername.trim() || savingName) return
-    setSavingName(true)
+  async function uploadAvatar(event) {
     try {
-      await updateProfile({ username: newUsername.trim() })
-      setEditingUsername(false)
-    } catch (err) {
-      console.error(err)
+      setUploadingAvatar(true)
+      if (!event.target.files || event.target.files.length === 0) {
+        throw new Error('You must select an image to upload.')
+      }
+
+      const file = event.target.files[0]
+      const fileExt = file.name.split('.').pop()
+      const fileName = `${user.id}-${Math.random()}.${fileExt}`
+      const filePath = `${fileName}`
+
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(filePath, file)
+
+      if (uploadError) throw uploadError
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(filePath)
+
+      await updateProfile({ avatar_url: publicUrl })
+    } catch (error) {
+      alert('Error uploading avatar: ' + error.message)
     } finally {
-      setSavingName(false)
+      setUploadingAvatar(false)
     }
   }
 
@@ -99,59 +122,42 @@ export default function ProfilePage() {
 
           {/* Avatar & Name */}
           <div className="flex items-center gap-4 mb-6">
-            <div className="relative">
-              <div className="w-24 h-24 rounded-full bg-gradient-to-br from-primary-600 to-accent-600 flex items-center justify-center overflow-hidden ring-4 ring-primary-500/20 shadow-neon-primary">
+            <div className="relative group">
+              <div className="w-24 h-24 rounded-full bg-gradient-to-br from-primary-600 to-accent-600 flex items-center justify-center overflow-hidden ring-4 ring-primary-500/20 shadow-neon-primary relative">
                 {avatarUrl ? (
                   <img src={avatarUrl} alt={displayName} className="w-full h-full object-cover" />
                 ) : (
                   <span className="text-white text-4xl font-bold drop-shadow-[0_0_8px_rgba(255,255,255,0.5)]">{displayName[0]?.toUpperCase()}</span>
                 )}
-                {!avatarUrl && <div className="absolute inset-0 bg-black/20" />}
+                
+                {/* Upload overlay */}
+                <label className={`absolute inset-0 bg-black/60 flex flex-col items-center justify-center cursor-pointer transition-opacity duration-300 ${uploadingAvatar ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+                  {uploadingAvatar ? (
+                    <span className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    <>
+                      <ImageIcon className="w-6 h-6 text-white mb-1" />
+                      <span className="text-[10px] font-bold text-white uppercase tracking-wider">Change</span>
+                    </>
+                  )}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={uploadAvatar}
+                    disabled={uploadingAvatar}
+                    className="hidden"
+                  />
+                </label>
               </div>
             </div>
 
             <div className="flex-1 min-w-0">
-              {editingUsername ? (
-                <div className="flex flex-col gap-2">
-                  <input
-                    autoFocus
-                    value={newUsername}
-                    onChange={(e) => setNewUsername(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && saveUsername()}
-                    className="input-base text-base font-bold py-2.5 px-4 bg-black/40"
-                    placeholder="New username"
-                  />
-                  <div className="flex gap-2">
-                    <button
-                      onClick={saveUsername}
-                      disabled={savingName}
-                      className="btn-primary py-2 px-4 text-sm flex-1"
-                    >
-                      {savingName ? '...' : 'Save'}
-                    </button>
-                    <button
-                      onClick={() => setEditingUsername(false)}
-                      className="btn-secondary py-2 px-4 text-sm font-semibold border-white/10"
-                    >
-                      Cancel
-                    </button>
-                  </div>
+              <div className="flex flex-col justify-center">
+                <div className="flex items-center gap-3">
+                  <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-100 to-gray-400 truncate tracking-tight">{displayName}</h1>
                 </div>
-              ) : (
-                <div className="flex flex-col justify-center">
-                  <div className="flex items-center gap-3">
-                    <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-100 to-gray-400 truncate tracking-tight">{displayName}</h1>
-                    <button
-                      onClick={() => { setNewUsername(displayName); setEditingUsername(true) }}
-                      className="text-gray-500 hover:text-accent-400 transition-colors p-1.5 rounded-full hover:bg-surface"
-                      aria-label="Edit username"
-                    >
-                      <Edit3 className="w-4 h-4" />
-                    </button>
-                  </div>
-                  <p className="text-sm font-medium text-gray-500 mt-0.5 truncate tracking-wide">{user.email}</p>
-                </div>
-              )}
+                <p className="text-sm font-medium text-gray-500 mt-0.5 truncate tracking-wide">{user.email}</p>
+              </div>
             </div>
           </div>
 
@@ -165,11 +171,11 @@ export default function ProfilePage() {
               <p className="text-2xl font-black text-accent-300 drop-shadow-[0_0_8px_rgba(59,130,246,0.5)]">{stats.totalVotes}</p>
               <p className="text-[9px] uppercase tracking-widest text-accent-500 font-bold mt-1">Votes</p>
             </div>
-            <div className="glass-panel !bg-white/5 p-4 text-center border !border-white/10 hover:shadow-glass transition-all duration-300">
+            <div onClick={() => setShowModal('followers')} className="glass-panel !bg-white/5 p-4 text-center border !border-white/10 hover:shadow-glass transition-all duration-300 cursor-pointer">
               <p className="text-2xl font-black text-gray-200">{stats.followers}</p>
               <p className="text-[9px] uppercase tracking-widest text-gray-500 font-bold mt-1">Followers</p>
             </div>
-            <div className="glass-panel !bg-white/5 p-4 text-center border !border-white/10 hover:shadow-glass transition-all duration-300">
+            <div onClick={() => setShowModal('following')} className="glass-panel !bg-white/5 p-4 text-center border !border-white/10 hover:shadow-glass transition-all duration-300 cursor-pointer">
               <p className="text-2xl font-black text-gray-200">{stats.following}</p>
               <p className="text-[9px] uppercase tracking-widest text-gray-500 font-bold mt-1">Following</p>
             </div>
@@ -212,6 +218,43 @@ export default function ProfilePage() {
           Sign Out
         </button>
       </div>
+
+      {/* Users Modal */}
+      {showModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowModal(null)} />
+          <div className="relative w-full max-w-sm glass-panel p-6 shadow-2xl animate-fade-in border !border-white/10 z-10 max-h-[80vh] flex flex-col">
+            <div className="flex items-center justify-between mb-4 border-b border-white/5 pb-4">
+              <h3 className="text-lg font-bold text-gray-200 uppercase tracking-wider">
+                {showModal === 'followers' ? 'Followers' : 'Following'}
+              </h3>
+              <button onClick={() => setShowModal(null)} className="text-gray-500 hover:text-white transition-colors p-1">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-2">
+              {(showModal === 'followers' ? followersList : followingList).length === 0 ? (
+                <p className="text-sm text-gray-500 text-center py-6">No users found.</p>
+              ) : (
+                (showModal === 'followers' ? followersList : followingList).map(u => (
+                  <button key={u.id} onClick={() => { setShowModal(null); navigate(`/user/${u.id}`) }} className="w-full flex items-center gap-3 p-2 hover:bg-white/5 rounded-xl transition-colors text-left group">
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary-600 to-accent-600 flex items-center justify-center overflow-hidden shrink-0">
+                      {u.avatar_url ? (
+                        <img src={u.avatar_url} className="w-full h-full object-cover" />
+                      ) : (
+                        <UserIcon className="w-5 h-5 text-white" />
+                      )}
+                    </div>
+                    <span className="font-bold text-gray-200 group-hover:text-white transition-colors truncate">
+                      @{u.username}
+                    </span>
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

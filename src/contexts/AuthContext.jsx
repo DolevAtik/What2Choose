@@ -141,11 +141,11 @@ export function AuthProvider({ children }) {
       setUser(null)
       setProfile(null)
       // Wipe any lingering auth keys
-      for (let key in localStorage) {
+      Object.keys(localStorage).forEach((key) => {
         if (key.startsWith('sb-') || key.startsWith('w2c-')) {
           localStorage.removeItem(key)
         }
-      }
+      })
     }
   }
 

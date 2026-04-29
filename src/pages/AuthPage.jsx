@@ -59,7 +59,7 @@ export default function AuthPage() {
         {/* Logo / Brand */}
         <div className="text-center mb-8 animate-fade-in flex flex-col items-center">
           <div className="inline-flex items-center justify-center w-20 h-20 bg-white rounded-3xl shadow-[0_8px_32px_rgba(255,255,255,0.1)] mb-4 relative overflow-hidden group p-2">
-            <img src="/logo.png" alt="What2Choose Logo" className="w-full h-full object-contain relative z-10 group-hover:scale-110 transition-transform duration-500" />
+            <img src="/logo.jpeg" alt="What2Choose Logo" className="w-full h-full object-contain relative z-10 group-hover:scale-110 transition-transform duration-500" />
             <div className="absolute inset-0 bg-gradient-to-tr from-primary-500/10 to-accent-500/10" />
           </div>
           <h1 className="text-3xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-gray-100 to-gray-400 tracking-tight">What2Choose</h1>
