@@ -114,7 +114,12 @@ html.light-mode .glass-card:hover {
 
 html.light-mode .bg-surfaceHover,
 html.light-mode .hover\:bg-surfaceHover:hover,
+html.light-mode .bg-surface\/90,
+html.light-mode .bg-surface\/80,
+html.light-mode .bg-surface\/70,
+html.light-mode .bg-surface\/60,
 html.light-mode .bg-surface\/50,
+html.light-mode .bg-surface\/40,
 html.light-mode .bg-surface\/30 {
   background-color: rgba(0, 0, 0, 0.04) !important;
 }

@@ -377,7 +377,7 @@ export default function DecisionCard({ post }) {
               disabled={!!userVote || voting || !user}
               className={`relative aspect-[4/5] overflow-hidden transition-all duration-500
                 ${!userVote && user ? 'cursor-pointer' : 'cursor-default'}
-                ${isOther ? 'opacity-70' : 'opacity-100'}
+                ${isOther ? 'opacity-90' : 'opacity-100'}
                 ${isThirdOfThree ? 'col-span-2 max-w-[50%] mx-auto w-full !aspect-square' : ''}
                 ${isFirst && !isThirdOfThree ? 'rounded-l-2xl' : ''}
                 ${isLast && !isThirdOfThree ? 'rounded-r-2xl' : ''}
@@ -434,7 +434,7 @@ export default function DecisionCard({ post }) {
                   <motion.div
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
-                    className={`absolute inset-0 flex flex-col items-center justify-end pb-4 px-3 gap-2 transition-all duration-500 ${isVoted ? 'bg-primary-900/30' : 'bg-black/40'}`}
+                    className={`absolute inset-0 flex flex-col items-center justify-end pb-4 px-3 gap-2 transition-all duration-500 ${isVoted ? 'bg-primary-900/25' : 'bg-black/25'}`}
                   >
                     {isVoted && (
                       <motion.div initial={{ opacity: 0, scale: 0 }} animate={{ opacity: 1, scale: 1 }}
@@ -446,7 +446,7 @@ export default function DecisionCard({ post }) {
                         <CheckCircle className="w-7 h-7 text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.8)] relative z-10" />
                       </motion.div>
                     )}
-                    <div className="w-full bg-black/40 backdrop-blur-xl rounded-full h-2 overflow-hidden relative z-10 border border-white/10">
+                    <div className={`w-full rounded-full h-2 overflow-hidden relative z-10 border border-white/10 ${isVoted ? 'bg-black/35 backdrop-blur-md' : 'bg-black/25 backdrop-blur-sm'}`}>
                       <motion.div
                         initial={{ width: 0 }}
                         animate={{ width: `${p}%` }}
