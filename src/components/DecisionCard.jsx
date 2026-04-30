@@ -340,14 +340,29 @@ export default function DecisionCard({ post }) {
 
               {/* Pre-vote overlay */}
               {!showResult && (
-                <div className={`absolute inset-0 flex items-center justify-center transition-all duration-300
-                  ${!userVote && user ? 'bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-80 hover:opacity-100' : 'bg-gradient-to-t from-black/60 to-transparent'}`}>
-                  <motion.span
-                    whileHover={{ scale: 1.1 }}
-                    className={`inline-flex items-center justify-center w-12 h-12 rounded-full font-bold text-xl text-white bg-black/40 backdrop-blur-md border border-white/20 ${voting ? 'animate-pulse' : ''}`}
-                  >
-                    {opt.letter}
-                  </motion.span>
+                <div
+                  className={`absolute inset-0 transition-all duration-300
+                    ${!userVote && user
+                      ? 'bg-gradient-to-t from-black/70 via-black/10 to-transparent opacity-80 hover:opacity-100'
+                      : 'bg-gradient-to-t from-black/55 to-transparent'
+                    }`}
+                >
+                  {isTextOption ? (
+                    <div className="absolute top-3 left-3">
+                      <span className={`inline-flex items-center justify-center px-2.5 py-1 rounded-full text-xs font-black text-white bg-black/45 backdrop-blur-md border border-white/15 ${voting ? 'animate-pulse' : ''}`}>
+                        {opt.letter}
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <motion.span
+                        whileHover={{ scale: 1.1 }}
+                        className={`inline-flex items-center justify-center w-12 h-12 rounded-full font-bold text-xl text-white bg-black/40 backdrop-blur-md border border-white/20 ${voting ? 'animate-pulse' : ''}`}
+                      >
+                        {opt.letter}
+                      </motion.span>
+                    </div>
+                  )}
                 </div>
               )}
 
