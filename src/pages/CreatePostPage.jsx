@@ -123,10 +123,12 @@ export default function CreatePostPage() {
         question: question.trim(),
         option_a_url: urls[0],
         option_b_url: urls[1],
-        option_c_url: urls[2] ?? null,
-        option_d_url: urls[3] ?? null,
         category,
       }
+      // Backward-compatible: only include C/D columns when present.
+      // If the DB is still on schema v1 (no option_c_url/option_d_url), sending them will fail the insert.
+      if (urls[2]) row.option_c_url = urls[2]
+      if (urls[3]) row.option_d_url = urls[3]
 
       const { error: insertError } = await supabase.from('posts').insert(row)
       if (insertError) throw new Error(`Database error: ${insertError.message}`)
@@ -134,8 +136,11 @@ export default function CreatePostPage() {
       navigate('/')
     } catch (err) {
       console.error(err)
+      const msg = err?.message || ''
       if (err.message?.includes('bucket not found')) {
         setError('Storage bucket "post-images" not found.')
+      } else if (msg.includes('option_c_url') || msg.includes('option_d_url')) {
+        setError('Your Supabase database is missing columns for 3–4 options. Please run `supabase/schema_v3.sql` in Supabase SQL editor.')
       } else if (err.message?.includes('Policy')) {
         setError('Permission denied. Run the RLS SQL script in Supabase.')
       } else {
