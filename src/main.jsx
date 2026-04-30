@@ -9,12 +9,28 @@ import './index.css'
 // reload once to get the latest index.html + assets.
 // See: Vite "preload error" event.
 if (typeof window !== 'undefined') {
-  window.addEventListener('vite:preloadError', () => {
-    // Avoid infinite reload loops
+  const reloadOnce = () => {
     const key = 'w2c-preload-reload'
     if (sessionStorage.getItem(key)) return
     sessionStorage.setItem(key, '1')
     window.location.reload()
+  }
+
+  window.addEventListener('vite:preloadError', () => {
+    reloadOnce()
+  })
+
+  // Some browsers surface chunk issues as unhandled promise rejections.
+  window.addEventListener('unhandledrejection', (e) => {
+    const msg = String(e?.reason?.message || e?.reason || '')
+    if (
+      msg.includes('Failed to fetch dynamically imported module') ||
+      msg.includes('Importing a module script failed') ||
+      msg.includes('Loading chunk') ||
+      msg.includes('ChunkLoadError')
+    ) {
+      reloadOnce()
+    }
   })
 }
 
