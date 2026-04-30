@@ -7,6 +7,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { useLanguage } from '../contexts/LanguageContext'
 import CommentSection from './CommentSection'
+import { toast } from '../lib/toast'
 
 const OPTION_LETTERS = ['A', 'B', 'C', 'D']
 
@@ -34,6 +35,9 @@ export default function DecisionCard({ post }) {
   const [chatSending, setChatSending] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [isDeleted, setIsDeleted] = useState(false)
+  // Follow (feed shortcut)
+  const [isFollowingAuthor, setIsFollowingAuthor] = useState(false)
+  const [followLoading, setFollowLoading] = useState(false)
   // Voters modal (author-only)
   const [showVoters, setShowVoters] = useState(false)
   const [votersLoading, setVotersLoading] = useState(false)
@@ -95,6 +99,47 @@ export default function DecisionCard({ post }) {
     const { count: cCnt } = await supabase
       .from('comments').select('*', { count: 'exact', head: true }).eq('post_id', post.id)
     setCommentCount(cCnt || 0)
+
+    // Follow state (only when logged in and not my own post)
+    if (user && post.author_id && user.id !== post.author_id) {
+      const { data: f } = await supabase
+        .from('follows')
+        .select('id')
+        .eq('follower_id', user.id)
+        .eq('following_id', post.author_id)
+        .maybeSingle()
+      setIsFollowingAuthor(!!f)
+    }
+  }
+
+  async function toggleFollowAuthor(e) {
+    e.stopPropagation()
+    if (!user || !post.author_id || user.id === post.author_id || followLoading) return
+    setFollowLoading(true)
+    try {
+      if (isFollowingAuthor) {
+        const { error } = await supabase
+          .from('follows')
+          .delete()
+          .eq('follower_id', user.id)
+          .eq('following_id', post.author_id)
+        if (error) throw error
+        setIsFollowingAuthor(false)
+        toast.info(t('unfollow'))
+      } else {
+        const { error } = await supabase
+          .from('follows')
+          .insert({ follower_id: user.id, following_id: post.author_id })
+        if (error) throw error
+        setIsFollowingAuthor(true)
+        toast.success(t('follow'))
+      }
+    } catch (err) {
+      console.error('Follow toggle failed:', err)
+      toast.error(err?.message || 'Failed to update follow')
+    } finally {
+      setFollowLoading(false)
+    }
   }
 
   async function openVoters() {
@@ -207,10 +252,10 @@ export default function DecisionCard({ post }) {
         if (msgError) throw msgError
       }
       
-      alert('Post shared successfully!')
+      toast.success(t('sentToChat'))
     } catch (err) {
       console.error('Chat share error:', err)
-      alert('Error sharing post: ' + err.message)
+      toast.error(err?.message ? `${t('chatError')}: ${err.message}` : t('chatError'))
     } finally {
       setChatSending(false)
       setShowShareMenu(false)
@@ -221,14 +266,14 @@ export default function DecisionCard({ post }) {
   }
 
   async function handleDeletePost() {
-    if (!window.confirm('Are you sure you want to delete this post?')) return
+    if (!window.confirm(t('confirmDeletePost'))) return
     setIsDeleting(true)
     try {
       await supabase.from('posts').delete().eq('id', post.id)
       setIsDeleted(true)
     } catch (err) {
       console.error('Error deleting post:', err)
-      alert('Failed to delete post.')
+      toast.error(t('failedToDeletePost'))
       setIsDeleting(false)
     }
   }
@@ -275,15 +320,32 @@ export default function DecisionCard({ post }) {
         </button>
         {post.category && (
           <span className="text-[10px] font-bold uppercase tracking-wider px-3 py-1.5 rounded-full bg-surfaceHover text-primary-400 border border-primary-500/20 shadow-[0_0_10px_rgba(139,92,246,0.1)] shrink-0">
-            {post.category}
+            {t(`cat${post.category}`) || post.category}
           </span>
         )}
+
+        {user && user.id !== post.author_id && (
+          <button
+            onClick={toggleFollowAuthor}
+            disabled={followLoading}
+            className={`px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider transition-all border shrink-0
+              ${isFollowingAuthor
+                ? 'bg-white/6 border-white/10 text-gray-300 hover:bg-white/10'
+                : 'bg-primary-500/15 border-primary-500/25 text-primary-200 hover:bg-primary-500/25'
+              }
+              ${followLoading ? 'opacity-60 cursor-not-allowed' : ''}`}
+            title={isFollowingAuthor ? t('unfollow') : t('follow')}
+          >
+            {followLoading ? '…' : (isFollowingAuthor ? t('unfollow') : t('follow'))}
+          </button>
+        )}
+
         {user?.id === post.author_id && (
           <button
             onClick={handleDeletePost}
             disabled={isDeleting}
             className="p-2 rounded-full text-gray-500 hover:text-red-500 hover:bg-red-500/10 transition-all shrink-0"
-            title="Delete post"
+            title={t('deletePost')}
           >
             {isDeleting ? <span className="w-4 h-4 border-2 border-red-500/30 border-t-red-500 rounded-full animate-spin block" /> : <Trash2 className="w-4 h-4" />}
           </button>
@@ -321,7 +383,7 @@ export default function DecisionCard({ post }) {
                 ${isLast && !isThirdOfThree ? 'rounded-r-2xl' : ''}
                 ${isThirdOfThree ? 'rounded-2xl' : ''}
               `}
-              aria-label={`Vote for option ${opt.letter}`}
+              aria-label={t('voteForOption', { letter: opt.letter })}
             >
               {isTextOption ? (
                 <div className="w-full h-full bg-gradient-to-br from-gray-900/90 to-black/90 flex items-center justify-center p-4">
@@ -397,7 +459,7 @@ export default function DecisionCard({ post }) {
                         {p}%
                       </motion.span>
                       <span className="text-gray-300 text-[10px] font-bold uppercase tracking-wider">
-                        {votes[opt.letter] || 0} votes
+                        {t('votesCount', { n: votes[opt.letter] || 0 })}
                       </span>
                     </div>
                   </motion.div>
@@ -480,28 +542,28 @@ export default function DecisionCard({ post }) {
                 {!shareToChat ? (
                   <>
                     <div className="px-4 pt-3 pb-1">
-                      <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Share</p>
+                      <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">{t('share')}</p>
                     </div>
                     {typeof navigator.share !== 'undefined' && (
                       <button
                         onClick={() => { navigator.share({ title: post.question, url: `${window.location.origin}/?post=${post.id}` }); setShowShareMenu(false) }}
                         className="w-full flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-colors text-sm font-semibold text-gray-200"
                       >
-                        <Share2 className="w-4 h-4 text-primary-400" /> Share link
+                        <Share2 className="w-4 h-4 text-primary-400" /> {t('shareLink')}
                       </button>
                     )}
                     <button
                       onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/?post=${post.id}`); setShowShareMenu(false) }}
                       className="w-full flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-colors text-sm font-semibold text-gray-200"
                     >
-                      <Share2 className="w-4 h-4 text-accent-400" /> Copy link
+                      <Share2 className="w-4 h-4 text-accent-400" /> {t('copyLink')}
                     </button>
                     {user && (
                       <button
                         onClick={() => setShareToChat(true)}
                         className="w-full flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-colors text-sm font-semibold text-gray-200 border-t border-white/5"
                       >
-                        <Send className="w-4 h-4 text-emerald-400" /> Send in Chat
+                        <Send className="w-4 h-4 text-emerald-400" /> {t('sendInChat')}
                       </button>
                     )}
                     <button onClick={() => setShowShareMenu(false)} className="absolute top-2 right-2 p-1 text-gray-600 hover:text-gray-400">
@@ -514,7 +576,7 @@ export default function DecisionCard({ post }) {
                       <button onClick={() => { setShareToChat(false); setChatSearch(''); setChatSearchResults([]) }} className="text-gray-500 hover:text-gray-300">
                         <X className="w-4 h-4" />
                       </button>
-                      <p className="text-xs font-bold text-gray-300">Send to...</p>
+                      <p className="text-xs font-bold text-gray-300">{t('sendTo')}</p>
                     </div>
                     <div className="relative">
                       <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-500" />
@@ -522,7 +584,7 @@ export default function DecisionCard({ post }) {
                         autoFocus
                         value={chatSearch}
                         onChange={e => { setChatSearch(e.target.value); searchChatUsers(e.target.value) }}
-                        placeholder="Search user..."
+                        placeholder={t('searchUser')}
                         className="w-full bg-white/5 border border-white/5 rounded-lg pl-8 pr-3 py-2 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-primary-500/50"
                       />
                     </div>
@@ -542,7 +604,7 @@ export default function DecisionCard({ post }) {
                         </button>
                       ))}
                       {chatSearch && chatSearchResults.length === 0 && (
-                        <p className="text-xs text-gray-600 text-center py-2">No users found</p>
+                        <p className="text-xs text-gray-600 text-center py-2">{t('noUsersFound')}</p>
                       )}
                     </div>
                   </div>

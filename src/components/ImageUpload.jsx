@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from 'react'
 import { Upload, X } from 'lucide-react'
 import { useLanguage } from '../contexts/LanguageContext'
+import { toast } from '../lib/toast'
 
 export default function ImageUpload({ label, value, onChange, id }) {
   const { t } = useLanguage()
@@ -10,11 +11,11 @@ export default function ImageUpload({ label, value, onChange, id }) {
   const handleFile = useCallback((file) => {
     if (!file) return
     if (!file.type.startsWith('image/')) {
-      alert('Please select an image file')
+      toast.error('Please select an image file')
       return
     }
     if (file.size > 10 * 1024 * 1024) {
-      alert('Image must be under 10MB')
+      toast.error('Image must be under 10MB')
       return
     }
     onChange(file)

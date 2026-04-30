@@ -6,12 +6,14 @@ import { useAuth } from '../hooks/useAuth'
 import { useSearchParams } from 'react-router-dom'
 import DecisionCard from '../components/DecisionCard'
 import SkeletonCard from '../components/SkeletonCard'
+import { useLanguage } from '../contexts/LanguageContext'
 
 const CATEGORIES = ['All', 'Fashion', 'Food', 'Shopping', 'Travel']
 const PAGE_SIZE = 10
 
 export default function FeedPage() {
   const { user } = useAuth()
+  const { t } = useLanguage()
   const [searchParams, setSearchParams] = useSearchParams()
   const targetPostId = searchParams.get('post')
 
@@ -165,7 +167,7 @@ export default function FeedPage() {
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <Sparkles className="w-5 h-5 text-primary-500 drop-shadow-[0_0_8px_rgba(139,92,246,0.6)]" />
-              <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-100 to-gray-400 tracking-tight">Feed</h1>
+              <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-100 to-gray-400 tracking-tight">{t('feed')}</h1>
             </div>
             {/* Following / Global toggle */}
             <div className="flex items-center gap-1 p-1 rounded-xl bg-white/5 border border-white/5">
@@ -175,7 +177,7 @@ export default function FeedPage() {
                   ${feedMode === 'global' ? 'bg-primary-600 text-white shadow-neon-primary' : 'text-gray-400 hover:text-gray-200'}`}
               >
                 <Globe className="w-3.5 h-3.5" />
-                All
+                {t('all')}
               </button>
               <button
                 onClick={() => setFeedMode('following')}
@@ -185,7 +187,7 @@ export default function FeedPage() {
                   ${!user ? 'opacity-40 cursor-not-allowed' : ''}`}
               >
                 <Users className="w-3.5 h-3.5" />
-                Following
+                {t('following')}
               </button>
             </div>
 
@@ -196,7 +198,7 @@ export default function FeedPage() {
                 fetchPosts(true)
               }}
               className="ml-2 p-2 rounded-xl text-gray-400 hover:text-white hover:bg-white/5 transition-all"
-              title="Refresh Feed"
+              title={t('refreshFeed')}
             >
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-primary-400' : ''}`} />
             </button>
@@ -214,7 +216,7 @@ export default function FeedPage() {
                     : 'bg-surface/50 border border-white/5 text-gray-400 hover:bg-surface hover:text-gray-200'
                   }`}
               >
-                {cat === 'All' ? '🔥 All' : cat}
+                {cat === 'All' ? `🔥 ${t('all')}` : (t(`cat${cat}`) || cat)}
               </button>
             ))}
           </div>
@@ -225,7 +227,7 @@ export default function FeedPage() {
       <div className="max-w-lg mx-auto px-4 pt-4 space-y-6">
         {loadError && !loading && (
           <div className="glass-panel p-4 border border-red-500/20 bg-red-500/5">
-            <p className="text-sm font-bold text-red-400 mb-2">Couldn’t load the feed</p>
+            <p className="text-sm font-bold text-red-400 mb-2">{t('couldntLoadFeed')}</p>
             <p className="text-xs text-gray-400 mb-4">{loadError}</p>
             <button
               onClick={() => {
@@ -235,7 +237,7 @@ export default function FeedPage() {
               }}
               className="btn-primary w-full"
             >
-              Retry
+              {t('retry')}
             </button>
           </div>
         )}
@@ -265,7 +267,7 @@ export default function FeedPage() {
 
         {!hasMore && posts.length > 0 && (
           <div className="text-center py-8">
-            <p className="text-sm font-bold uppercase tracking-widest text-primary-500 drop-shadow">END OF FEED</p>
+            <p className="text-sm font-bold uppercase tracking-widest text-primary-500 drop-shadow">{t('endOfFeed')}</p>
           </div>
         )}
       </div>
@@ -274,18 +276,19 @@ export default function FeedPage() {
 }
 
 function EmptyState({ category, feedMode }) {
+  const { t } = useLanguage()
   return (
     <div className="text-center py-20 animate-fade-in glass-panel !rounded-3xl border-dashed border-2 border-white/10">
       <div className="text-5xl mb-4 drop-shadow-[0_0_15px_rgba(255,255,255,0.2)]">{feedMode === 'following' ? '👥' : '👻'}</div>
       <h3 className="text-lg font-bold text-gray-200 mb-1">
-        {feedMode === 'following' ? 'No posts from people you follow' : 'No decisions yet'}
+        {feedMode === 'following' ? t('noFollowingPosts') : t('noDecisionsYet')}
       </h3>
       <p className="text-sm text-gray-500 font-medium tracking-wide">
         {feedMode === 'following'
-          ? 'Follow people to see their posts here'
+          ? t('followToSeePosts')
           : category !== 'All'
-            ? `No posts in ${category} yet. Be the first!`
-            : 'Be the first to post a decision!'}
+            ? t('beFirstCategory', { cat: category })
+            : t('beFirst')}
       </p>
     </div>
   )

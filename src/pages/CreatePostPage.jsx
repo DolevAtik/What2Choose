@@ -114,21 +114,21 @@ export default function CreatePostPage() {
     e.preventDefault()
     setError('')
 
-    if (!question.trim()) return setError('Please enter your question')
+    if (!question.trim()) return setError(t('errQuestionRequired'))
     if (optionType === 'images') {
       for (let i = 0; i < images.length; i++) {
-        if (!images[i]) return setError(`Please upload Option ${OPTION_LETTERS[i]}`)
+        if (!images[i]) return setError(t('errUploadOption', { letter: OPTION_LETTERS[i] }))
       }
     } else {
       for (let i = 0; i < texts.length; i++) {
-        if (!texts[i]?.trim()) return setError(`Please enter Option ${OPTION_LETTERS[i]}`)
+        if (!texts[i]?.trim()) return setError(t('errEnterOption', { letter: OPTION_LETTERS[i] }))
       }
     }
-    if (!category) return setError('Please select a category')
+    if (!category) return setError(t('errCategoryRequired'))
 
     setLoading(true)
     setProgressPct(0)
-    setProgressMsg('Loading 0%')
+    setProgressMsg(`${t('loading')} 0%`)
 
     try {
       const ts = Date.now()
@@ -140,7 +140,7 @@ export default function CreatePostPage() {
         doneSteps += 1
         const pct = Math.min(100, Math.floor((doneSteps / totalSteps) * 100))
         setProgressPct(pct)
-        setProgressMsg(`Loading ${pct}%`)
+        setProgressMsg(`${t('loading')} ${pct}%`)
       }
       
       // Ensure profile exists before inserting posts (FK: posts.author_id -> profiles.id)
@@ -213,15 +213,15 @@ export default function CreatePostPage() {
       const msg = err?.message || ''
       const details = err?.details || err?.hint || err?.error_description || ''
       if (err.message?.includes('bucket not found')) {
-        setError('Storage bucket not found (expected "post-images" or "posts").')
+        setError(t('errStorageBucketMissing'))
       } else if (msg.includes('option_c_url') || msg.includes('option_d_url')) {
-        setError('Your Supabase database is missing columns for 3–4 options. Please run `supabase/schema_v3.sql` in Supabase SQL editor.')
+        setError(t('errSchemaV3Missing'))
       } else if (msg.includes('option_a_text') || msg.includes('option_b_text') || msg.includes('option_c_text') || msg.includes('option_d_text')) {
-        setError('Your Supabase database is missing text option columns. Please run `supabase/schema_v4.sql` in Supabase SQL editor.')
+        setError(t('errSchemaV4Missing'))
       } else if (err.message?.includes('Policy')) {
-        setError(`Permission denied. ${details || 'Run the RLS SQL script in Supabase.'}`)
+        setError(t('errPermissionDenied', { details: details || '' }))
       } else if (msg.toLowerCase().includes('foreign key') || msg.toLowerCase().includes('profiles')) {
-        setError('Profile not ready yet. Please try again in a few seconds (or refresh).')
+        setError(t('errProfileNotReady'))
       } else {
         setError(details ? `${msg}\n${details}` : (msg || 'Failed to create post.'))
       }

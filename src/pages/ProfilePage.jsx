@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase'
 import { withTimeout } from '../lib/withTimeout'
 import { useAuth } from '../hooks/useAuth'
 import DecisionCard from '../components/DecisionCard'
+import { toast } from '../lib/toast'
 
 export default function ProfilePage() {
   const navigate = useNavigate()
@@ -127,7 +128,7 @@ export default function ProfilePage() {
 
       await updateProfile({ avatar_url: publicUrl })
     } catch (error) {
-      alert('Error uploading avatar: ' + error.message)
+      toast.error(error?.message ? `Avatar upload failed: ${error.message}` : 'Avatar upload failed')
     } finally {
       setUploadingAvatar(false)
     }

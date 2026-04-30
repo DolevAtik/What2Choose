@@ -5,6 +5,7 @@ import { AuthProvider } from './contexts/AuthContext'
 import { useAuth } from './hooks/useAuth'
 import Navbar from './components/Navbar'
 import ErrorBoundary from './components/ErrorBoundary'
+import ToastViewport from './components/ToastViewport'
 
 const AuthPage = lazy(() => import('./pages/AuthPage'))
 const FeedPage = lazy(() => import('./pages/FeedPage'))
@@ -116,6 +117,7 @@ export default function App() {
   return (
     <ErrorBoundary>
       <AuthProvider>
+        <ToastViewport />
         <AppRoutes />
       </AuthProvider>
     </ErrorBoundary>

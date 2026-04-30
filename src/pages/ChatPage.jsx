@@ -5,10 +5,13 @@ import { Send, ArrowLeft, MessageCircle, Search, X, ExternalLink } from 'lucide-
 import { supabase } from '../lib/supabase'
 import { withTimeout } from '../lib/withTimeout'
 import { useAuth } from '../hooks/useAuth'
+import { toast } from '../lib/toast'
+import { useLanguage } from '../contexts/LanguageContext'
 
 export default function ChatPage() {
   const { userId: targetUserId } = useParams()
   const { user } = useAuth()
+  const { t } = useLanguage()
   const navigate = useNavigate()
 
   const [conversations, setConversations] = useState([])
@@ -165,7 +168,7 @@ export default function ChatPage() {
       }
     } catch (e) { 
       console.error('loadConversations failed:', e)
-      alert('Error loading conversations: ' + (e.message || JSON.stringify(e)))
+      toast.error(e?.message ? `Error loading conversations: ${e.message}` : 'Error loading conversations')
     } finally {
       setLoadingConvs(false)
     }
@@ -266,7 +269,7 @@ export default function ChatPage() {
       loadMessages(selectedConv.id)
     } catch (err) {
       console.error('Send message error:', err)
-      alert('Error sending message: ' + err.message)
+      toast.error(err?.message ? `Error sending message: ${err.message}` : 'Error sending message')
     } finally {
       setSending(false)
       inputRef.current?.focus()
@@ -311,7 +314,7 @@ export default function ChatPage() {
           <div className="p-4 border-b border-white/5">
             <div className="flex items-center gap-2 mb-3">
               <MessageCircle className="w-5 h-5 text-primary-400" />
-              <h1 className="text-lg font-bold text-gray-100">Messages</h1>
+              <h1 className="text-lg font-bold text-gray-100">{t('messages')}</h1>
             </div>
             {/* Search users */}
             <div className="relative">
@@ -319,7 +322,7 @@ export default function ChatPage() {
               <input
                 value={searchQuery}
                 onChange={e => { setSearchQuery(e.target.value); searchUsers(e.target.value) }}
-                placeholder="Find a user to message..."
+                placeholder={t('findUserToMessage')}
                 className="w-full bg-white/5 border border-white/5 rounded-xl pl-9 pr-4 py-2.5 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-primary-500/50 transition-all"
               />
               {searchQuery && (
@@ -364,8 +367,8 @@ export default function ChatPage() {
             ) : conversations.length === 0 ? (
               <div className="py-12 text-center px-4">
                 <MessageCircle className="w-10 h-10 text-gray-700 mx-auto mb-3" />
-                <p className="text-sm font-medium text-gray-500">No conversations yet</p>
-                <p className="text-xs text-gray-600 mt-1">Search for a user above to start chatting</p>
+                <p className="text-sm font-medium text-gray-500">{t('noConversationsYet')}</p>
+                <p className="text-xs text-gray-600 mt-1">{t('searchToStartChat')}</p>
               </div>
             ) : (
               conversations.map(conv => (
@@ -386,7 +389,7 @@ export default function ChatPage() {
                       <span className="text-[10px] text-gray-600 shrink-0 ml-2">{timeAgo(conv.lastMessage?.created_at)}</span>
                     </div>
                     <p className="text-xs text-gray-500 truncate mt-0.5">
-                      {conv.lastMessage?.post_id ? '📎 Shared a post' : conv.lastMessage?.content || 'Start the conversation'}
+                      {conv.lastMessage?.post_id ? t('sharedPost') : (conv.lastMessage?.content || t('startConversation'))}
                     </p>
                   </div>
                 </button>
@@ -411,12 +414,12 @@ export default function ChatPage() {
                 </div>
                 <div>
                   <p className="text-sm font-bold text-gray-100">@{selectedConv.otherUser?.username}</p>
-                  <p className="text-[10px] text-gray-500 uppercase tracking-wider">Direct Message</p>
+                  <p className="text-[10px] text-gray-500 uppercase tracking-wider">{t('directMessage')}</p>
                 </div>
                 <button
                   onClick={() => navigate(`/user/${selectedConv.otherUser?.id}`)}
                   className="ml-auto p-2 rounded-lg hover:bg-white/5 text-gray-500 hover:text-gray-300 transition-colors"
-                  title="View profile"
+                  title={t('viewProfile')}
                 >
                   <ExternalLink className="w-4 h-4" />
                 </button>
@@ -431,7 +434,7 @@ export default function ChatPage() {
                 ) : messages.length === 0 ? (
                   <div className="flex flex-col items-center justify-center h-full text-center">
                     <div className="text-4xl mb-3">👋</div>
-                    <p className="text-sm font-medium text-gray-400">Say hi to @{selectedConv.otherUser?.username}!</p>
+                    <p className="text-sm font-medium text-gray-400">{t('sayHiTo', { username: selectedConv.otherUser?.username })}</p>
                   </div>
                 ) : (
                   messages.map((msg) => {
@@ -450,13 +453,13 @@ export default function ChatPage() {
                               <img src={msg.post.option_a_url} alt="Post" className="w-full h-32 object-cover" />
                             )}
                             <div className="p-3">
-                              <p className="text-xs text-gray-400 font-semibold mb-1 uppercase tracking-wider">Shared Post</p>
+                              <p className="text-xs text-gray-400 font-semibold mb-1 uppercase tracking-wider">{t('sharedPostTitle')}</p>
                               <p className="text-sm font-bold text-gray-100 line-clamp-2">{msg.post.question}</p>
                               <button
                                 onClick={() => navigate(`/?post=${msg.post.id}`)}
                                 className="mt-2 text-xs text-primary-400 hover:text-primary-300 flex items-center gap-1 font-semibold"
                               >
-                                <ExternalLink className="w-3 h-3" /> View post
+                                <ExternalLink className="w-3 h-3" /> {t('viewPost')}
                               </button>
                             </div>
                           </div>
@@ -483,7 +486,7 @@ export default function ChatPage() {
                   ref={inputRef}
                   value={newMsg}
                   onChange={e => setNewMsg(e.target.value)}
-                  placeholder="Type a message..."
+                  placeholder={t('typeMessage')}
                   className="flex-1 bg-white/5 border border-white/5 rounded-xl px-4 py-3 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-primary-500/50 transition-all"
                   onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) sendMessage(e) }}
                 />
@@ -502,8 +505,8 @@ export default function ChatPage() {
               <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary-600 to-accent-600 flex items-center justify-center mb-4 shadow-neon-primary">
                 <MessageCircle className="w-8 h-8 text-white" />
               </div>
-              <h2 className="text-lg font-bold text-gray-200 mb-2">Your Messages</h2>
-              <p className="text-sm text-gray-500 max-w-[240px]">Select a conversation or search for a user to start chatting</p>
+              <h2 className="text-lg font-bold text-gray-200 mb-2">{t('yourMessages')}</h2>
+              <p className="text-sm text-gray-500 max-w-[240px]">{t('selectConversation')}</p>
             </div>
           )}
         </div>
