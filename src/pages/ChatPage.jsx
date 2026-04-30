@@ -309,7 +309,7 @@ export default function ChatPage() {
       <div className="w-full max-w-4xl mx-auto flex-1 flex border border-white/5 shadow-[0_0_60px_rgba(0,0,0,0.5)] md:rounded-2xl overflow-hidden md:mt-4 md:mb-4">
 
         {/* ── Sidebar ── */}
-        <div className={`w-full md:w-[320px] shrink-0 flex flex-col bg-gray-950/80 border-r border-white/5 ${selectedConv ? 'hidden md:flex' : 'flex'}`}>
+        <div className={`w-full md:w-[320px] shrink-0 flex flex-col bg-surface/60 border-r border-white/5 ${selectedConv ? 'hidden md:flex' : 'flex'}`}>
           {/* Header */}
           <div className="p-4 border-b border-white/5">
             <div className="flex items-center gap-2 mb-3">
@@ -339,7 +339,7 @@ export default function ChatPage() {
                   initial={{ opacity: 0, y: -4 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -4 }}
-                  className="mt-2 bg-gray-900 border border-white/10 rounded-xl overflow-hidden shadow-xl"
+                  className="mt-2 bg-surface/90 border border-white/10 rounded-xl overflow-hidden shadow-xl"
                 >
                   {searchResults.map(u => (
                     <button
@@ -399,11 +399,11 @@ export default function ChatPage() {
         </div>
 
         {/* ── Chat Area ── */}
-        <div className={`flex-1 flex flex-col bg-gray-950/60 ${!selectedConv ? 'hidden md:flex' : 'flex'}`}>
+        <div className={`flex-1 flex flex-col bg-surface/40 ${!selectedConv ? 'hidden md:flex' : 'flex'}`}>
           {selectedConv ? (
             <>
               {/* Chat Header */}
-              <div className="flex items-center gap-3 px-4 py-3 border-b border-white/5 bg-gray-950/80">
+              <div className="flex items-center gap-3 px-4 py-3 border-b border-white/5 bg-surface/60">
                 <button onClick={() => setSelectedConv(null)} className="md:hidden p-1.5 rounded-lg hover:bg-white/5 text-gray-400 transition-colors">
                   <ArrowLeft className="w-5 h-5" />
                 </button>
@@ -481,7 +481,7 @@ export default function ChatPage() {
               </div>
 
               {/* Input */}
-              <form onSubmit={sendMessage} className="p-3 border-t border-white/5 bg-gray-950/80 flex items-center gap-2">
+              <form onSubmit={sendMessage} className="p-3 border-t border-white/5 bg-surface/60 flex items-center gap-2">
                 <input
                   ref={inputRef}
                   value={newMsg}

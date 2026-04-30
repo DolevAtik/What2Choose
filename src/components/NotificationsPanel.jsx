@@ -36,8 +36,9 @@ const TYPE_CONFIG = {
 export default function NotificationsPanel() {
   const { user } = useAuth()
   const navigate = useNavigate()
-  const { t } = useLanguage()
+  const { t, lang } = useLanguage()
   const panelRef = useRef(null)
+  const isRTL = lang === 'he'
 
   const [open, setOpen] = useState(false)
   const [notifications, setNotifications] = useState([])
@@ -163,7 +164,9 @@ export default function NotificationsPanel() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -8, scale: 0.97 }}
             transition={{ duration: 0.15, ease: [0.22, 1, 0.36, 1] }}
-            className="absolute right-0 top-12 w-[340px] !rounded-2xl overflow-hidden shadow-[0_16px_60px_rgba(0,0,0,0.75)] border border-white/10 z-50 bg-gray-950/95 backdrop-blur-xl"
+            dir={isRTL ? 'rtl' : 'ltr'}
+            className={`absolute top-12 w-[340px] !rounded-2xl overflow-hidden shadow-[0_16px_60px_rgba(0,0,0,0.75)] border border-white/10 z-50 bg-gray-950/95 backdrop-blur-xl
+              ${isRTL ? 'left-0' : 'right-0'}`}
           >
             {/* Header */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-white/5">
@@ -209,7 +212,7 @@ export default function NotificationsPanel() {
                     <button
                       key={notif.id}
                       onClick={() => handleNotifClick(notif)}
-                      className={`w-full flex items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-white/5
+                      className={`w-full flex items-start gap-3 px-4 py-3 ${isRTL ? 'text-right' : 'text-left'} transition-colors hover:bg-white/5
                         ${!notif.read ? 'bg-primary-500/5' : ''}
                         ${i < notifications.length - 1 ? 'border-b border-white/5' : ''}
                       `}
