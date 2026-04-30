@@ -67,7 +67,10 @@ export default function CreatePostPage() {
 
   async function uploadToStorage(blob, path) {
     async function tryBucket(bucketId) {
-      const upload = supabase.storage.from(bucketId).upload(path, blob, { contentType: 'image/jpeg', upsert: true })
+      const upload = supabase.storage.from(bucketId).upload(path, blob, {
+        contentType: 'image/jpeg',
+        upsert: false, // avoid requiring UPDATE policy on retries/collisions
+      })
       // Increased timeout to 90s to allow for slower connections
       const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Upload timed out')), 90000))
       const { error } = await Promise.race([upload, timeout])
@@ -137,7 +140,10 @@ export default function CreatePostPage() {
         const blob = await processImage(file)
         bumpProgress()
         // Step 2: upload
-        return uploadToStorage(blob, `${user.id}/${ts}_${OPTION_LETTERS[i].toLowerCase()}.jpg`)
+        const unique =
+          (globalThis.crypto?.randomUUID?.() || `${Math.random().toString(16).slice(2)}${Math.random().toString(16).slice(2)}`)
+        const path = `${user.id}/${ts}_${unique}_${OPTION_LETTERS[i].toLowerCase()}.jpg`
+        return uploadToStorage(blob, path)
           .then((url) => {
             bumpProgress()
             return url
@@ -168,16 +174,17 @@ export default function CreatePostPage() {
     } catch (err) {
       console.error(err)
       const msg = err?.message || ''
+      const details = err?.details || err?.hint || err?.error_description || ''
       if (err.message?.includes('bucket not found')) {
         setError('Storage bucket not found (expected "post-images" or "posts").')
       } else if (msg.includes('option_c_url') || msg.includes('option_d_url')) {
         setError('Your Supabase database is missing columns for 3–4 options. Please run `supabase/schema_v3.sql` in Supabase SQL editor.')
       } else if (err.message?.includes('Policy')) {
-        setError('Permission denied. Run the RLS SQL script in Supabase.')
+        setError(`Permission denied. ${details || 'Run the RLS SQL script in Supabase.'}`)
       } else if (msg.toLowerCase().includes('foreign key') || msg.toLowerCase().includes('profiles')) {
         setError('Profile not ready yet. Please try again in a few seconds (or refresh).')
       } else {
-        setError(err.message || 'Failed to create post.')
+        setError(details ? `${msg}\n${details}` : (msg || 'Failed to create post.'))
       }
     } finally {
       setLoading(false)
