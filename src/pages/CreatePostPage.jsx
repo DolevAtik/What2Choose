@@ -6,6 +6,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { useLanguage } from '../contexts/LanguageContext'
 import ImageUpload from '../components/ImageUpload'
+import { withTimeout } from '../lib/withTimeout'
 
 const CATEGORIES = ['Fashion', 'Food', 'Shopping', 'Travel']
 const OPTION_LETTERS = ['A', 'B', 'C', 'D']
@@ -65,13 +66,25 @@ export default function CreatePostPage() {
   }
 
   async function uploadToStorage(blob, path) {
-    const upload = supabase.storage.from('post-images').upload(path, blob, { contentType: 'image/jpeg', upsert: true })
-    // Increased timeout to 60s to allow for slower connections
-    const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Upload timed out')), 60000))
-    const { data, error } = await Promise.race([upload, timeout])
-    if (error) throw error
-    const { data: { publicUrl } } = supabase.storage.from('post-images').getPublicUrl(path)
-    return publicUrl
+    async function tryBucket(bucketId) {
+      const upload = supabase.storage.from(bucketId).upload(path, blob, { contentType: 'image/jpeg', upsert: true })
+      // Increased timeout to 90s to allow for slower connections
+      const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Upload timed out')), 90000))
+      const { error } = await Promise.race([upload, timeout])
+      if (error) throw error
+      const { data: { publicUrl } } = supabase.storage.from(bucketId).getPublicUrl(path)
+      return publicUrl
+    }
+
+    try {
+      return await tryBucket('post-images')
+    } catch (e) {
+      // Backward compatibility: some projects used bucket id "posts"
+      if (String(e?.message || '').toLowerCase().includes('bucket')) {
+        return await tryBucket('posts')
+      }
+      throw e
+    }
   }
 
   async function handleSubmit(e) {
@@ -100,6 +113,24 @@ export default function CreatePostPage() {
         setProgressMsg(`Loading ${pct}%`)
       }
       
+      // Ensure profile exists before inserting posts (FK: posts.author_id -> profiles.id)
+      await withTimeout(
+        supabase
+          .from('profiles')
+          .upsert({
+            id: user.id,
+            email: user.email,
+            username:
+              user.user_metadata?.full_name ||
+              user.user_metadata?.name ||
+              user.email?.split('@')[0] ||
+              'User',
+            avatar_url: user.user_metadata?.avatar_url || null,
+          }),
+        12000,
+        'Preparing your profile timed out'
+      )
+
       // Upload all images in parallel for better performance
       const uploadPromises = images.map(async (file, i) => {
         // Step 1: process
@@ -138,11 +169,13 @@ export default function CreatePostPage() {
       console.error(err)
       const msg = err?.message || ''
       if (err.message?.includes('bucket not found')) {
-        setError('Storage bucket "post-images" not found.')
+        setError('Storage bucket not found (expected "post-images" or "posts").')
       } else if (msg.includes('option_c_url') || msg.includes('option_d_url')) {
         setError('Your Supabase database is missing columns for 3–4 options. Please run `supabase/schema_v3.sql` in Supabase SQL editor.')
       } else if (err.message?.includes('Policy')) {
         setError('Permission denied. Run the RLS SQL script in Supabase.')
+      } else if (msg.toLowerCase().includes('foreign key') || msg.toLowerCase().includes('profiles')) {
+        setError('Profile not ready yet. Please try again in a few seconds (or refresh).')
       } else {
         setError(err.message || 'Failed to create post.')
       }
