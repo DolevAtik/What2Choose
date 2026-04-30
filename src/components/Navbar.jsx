@@ -8,6 +8,7 @@ import { supabase } from '../lib/supabase'
 import SearchBar from './SearchBar'
 import NotificationsPanel from './NotificationsPanel'
 import SettingsPanel from './SettingsPanel'
+import Attribution from './Attribution'
 
 export default function Navbar() {
   const location = useLocation()
@@ -247,6 +248,7 @@ export default function Navbar() {
                    <span className="text-xs font-bold text-gray-500">What2Choose</span>
                 </div>
                 <p className="text-[9px] text-gray-700 font-bold uppercase tracking-[0.2em]">{isRTL ? 'עוצב עבור מקבלי החלטות' : 'Crafted for decision makers'}</p>
+                <Attribution className="mt-3" />
               </div>
             </motion.div>
           </>

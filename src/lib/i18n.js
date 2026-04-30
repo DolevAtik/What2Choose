@@ -140,6 +140,8 @@ export const translations = {
     viewPost: 'View post',
     typeMessage: 'Type a message...',
     selectConversation: 'Select a conversation or search for a user to start chatting',
+    builtByDolevAtik: 'Built by Dolev Atik',
+    builtByLinkedInAria: 'Built by Dolev Atik (LinkedIn)',
 
     // General
     back: 'Back',
@@ -289,6 +291,8 @@ export const translations = {
     viewPost: 'צפה בפוסט',
     typeMessage: 'כתוב הודעה...',
     selectConversation: 'בחר שיחה או חפש משתמש כדי להתחיל לשוחח',
+    builtByDolevAtik: 'האתר נבנה ע״י דולב עתיק',
+    builtByLinkedInAria: 'האתר נבנה ע״י דולב עתיק (LinkedIn)',
 
     // General
     back: 'חזרה',

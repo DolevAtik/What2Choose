@@ -32,6 +32,16 @@
     @apply bg-surface/40 backdrop-blur-md border border-white/5 shadow-glass rounded-3xl overflow-hidden hover:bg-surface/50 transition-colors duration-300;
   }
 
+  /* High-contrast panel (readable in both themes) */
+  .solid-panel {
+    background-color: rgba(9, 9, 11, 0.97);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    box-shadow: 0 16px 60px rgba(0, 0, 0, 0.75);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    border-radius: 16px;
+  }
+
   /* Fancy Primary Button */
   .btn-primary {
     @apply relative overflow-hidden flex items-center justify-center gap-2 
@@ -110,6 +120,12 @@ html.light-mode .glass-card {
 
 html.light-mode .glass-card:hover {
   background-color: rgba(255, 255, 255, 0.95) !important;
+}
+
+html.light-mode .solid-panel {
+  background-color: rgba(255, 255, 255, 0.96) !important;
+  border-color: rgba(0, 0, 0, 0.10) !important;
+  box-shadow: 0 16px 60px rgba(0, 0, 0, 0.10) !important;
 }
 
 html.light-mode .bg-surfaceHover,

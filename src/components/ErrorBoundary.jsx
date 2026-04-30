@@ -1,4 +1,5 @@
 import React from 'react'
+import Attribution from './Attribution'
 
 export default class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -35,6 +36,9 @@ export default class ErrorBoundary extends React.Component {
               {this.state.error.message}
             </p>
           )}
+          <div className="mt-5 flex justify-center">
+            <Attribution />
+          </div>
         </div>
       </div>
     )

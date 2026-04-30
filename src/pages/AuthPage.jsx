@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Eye, EyeOff, Mail, Lock, User, Zap } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../hooks/useAuth'
+import Attribution from '../components/Attribution'
 
 export default function AuthPage() {
   const [tab, setTab] = useState('login') // 'login' | 'signup'
@@ -224,6 +225,10 @@ export default function AuthPage() {
         <p className="text-center text-xs text-gray-500 font-medium mt-8 tracking-wide">
           By continuing, you agree to our <span className="text-gray-300 hover:text-white transition-colors cursor-pointer">Terms of Service</span> &amp; <span className="text-gray-300 hover:text-white transition-colors cursor-pointer">Privacy Policy</span>
         </p>
+
+        <div className="mt-4 flex justify-center">
+          <Attribution />
+        </div>
       </div>
     </div>
   )

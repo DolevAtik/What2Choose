@@ -165,7 +165,7 @@ export default function NotificationsPanel() {
             exit={{ opacity: 0, y: -8, scale: 0.97 }}
             transition={{ duration: 0.15, ease: [0.22, 1, 0.36, 1] }}
             dir={isRTL ? 'rtl' : 'ltr'}
-            className={`absolute top-12 w-[340px] !rounded-2xl overflow-hidden shadow-[0_16px_60px_rgba(0,0,0,0.75)] border border-white/10 z-50 bg-surface/90 backdrop-blur-xl
+            className={`absolute top-12 w-[340px] overflow-hidden z-50 solid-panel
               ${isRTL ? 'left-0' : 'right-0'}`}
           >
             {/* Header */}
