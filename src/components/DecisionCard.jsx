@@ -368,6 +368,9 @@ export default function DecisionCard({ post }) {
           // Special center layout for 3rd option when count=3
           const isThirdOfThree = optionCount === 3 && opt.letter === 'C'
           const isTextOption = !opt.url && !!opt.text
+          const resultOverlayClass = isTextOption
+            ? (isVoted ? 'bg-primary-900/15' : 'bg-white/10')
+            : (isVoted ? 'bg-primary-900/25' : 'bg-black/25')
 
           return (
             <motion.button
@@ -386,7 +389,7 @@ export default function DecisionCard({ post }) {
               aria-label={t('voteForOption', { letter: opt.letter })}
             >
               {isTextOption ? (
-                <div className="w-full h-full bg-gradient-to-br from-gray-900/90 to-black/90 flex items-center justify-center p-4">
+                <div className="w-full h-full bg-surface/60 border border-white/10 flex items-center justify-center p-4">
                   <p className="text-center text-base md:text-lg font-black text-gray-100 leading-snug line-clamp-5">
                     {opt.text}
                   </p>
@@ -434,7 +437,7 @@ export default function DecisionCard({ post }) {
                   <motion.div
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
-                    className={`absolute inset-0 flex flex-col items-center justify-end pb-4 px-3 gap-2 transition-all duration-500 ${isVoted ? 'bg-primary-900/25' : 'bg-black/25'}`}
+                    className={`absolute inset-0 flex flex-col items-center justify-end pb-4 px-3 gap-2 transition-all duration-500 ${resultOverlayClass}`}
                   >
                     {isVoted && (
                       <motion.div initial={{ opacity: 0, scale: 0 }} animate={{ opacity: 1, scale: 1 }}
@@ -446,7 +449,11 @@ export default function DecisionCard({ post }) {
                         <CheckCircle className="w-7 h-7 text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.8)] relative z-10" />
                       </motion.div>
                     )}
-                    <div className={`w-full rounded-full h-2 overflow-hidden relative z-10 border border-white/10 ${isVoted ? 'bg-black/35 backdrop-blur-md' : 'bg-black/25 backdrop-blur-sm'}`}>
+                    <div className={`w-full rounded-full h-2 overflow-hidden relative z-10 border border-white/10 ${
+                      isTextOption
+                        ? (isVoted ? 'bg-white/10' : 'bg-white/8')
+                        : (isVoted ? 'bg-black/35 backdrop-blur-md' : 'bg-black/25 backdrop-blur-sm')
+                    }`}>
                       <motion.div
                         initial={{ width: 0 }}
                         animate={{ width: `${p}%` }}
