@@ -1,5 +1,6 @@
 import { createContext, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
+import { withTimeout } from '../lib/withTimeout'
 
 export const AuthContext = createContext(null)
 
@@ -59,11 +60,15 @@ export function AuthProvider({ children }) {
 
   /** Creates a profile row if none exists, then sets it in state */
   async function ensureProfile(currentUser) {
-    const { data: existingProfile } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', currentUser.id)
-      .single()
+    const { data: existingProfile } = await withTimeout(
+      supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', currentUser.id)
+        .single(),
+      12000,
+      'Loading profile timed out'
+    )
 
     if (existingProfile) {
       setProfile(existingProfile)
@@ -76,16 +81,20 @@ export function AuthProvider({ children }) {
       currentUser.user_metadata?.name ||
       currentUser.email?.split('@')[0]
 
-    const { data: newProfile, error: createError } = await supabase
-      .from('profiles')
-      .upsert({
-        id: currentUser.id,
-        username: username || 'User',
-        avatar_url: currentUser.user_metadata?.avatar_url || null,
-        email: currentUser.email,
-      })
-      .select()
-      .single()
+    const { data: newProfile, error: createError } = await withTimeout(
+      supabase
+        .from('profiles')
+        .upsert({
+          id: currentUser.id,
+          username: username || 'User',
+          avatar_url: currentUser.user_metadata?.avatar_url || null,
+          email: currentUser.email,
+        })
+        .select()
+        .single(),
+      12000,
+      'Creating profile timed out'
+    )
 
     if (createError) console.error('Failed to create initial profile:', createError)
     setProfile(newProfile)

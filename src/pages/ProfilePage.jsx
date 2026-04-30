@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { LogOut, Settings, BarChart2, Image as ImageIcon, Edit3, X, User as UserIcon } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { withTimeout } from '../lib/withTimeout'
 import { useAuth } from '../hooks/useAuth'
 import DecisionCard from '../components/DecisionCard'
 
@@ -28,11 +29,15 @@ export default function ProfilePage() {
     setLoading(true)
     try {
       // Fetch posts
-      const { data: userPosts } = await supabase
-        .from('posts')
-        .select('*, profiles(username, avatar_url, email)')
-        .eq('author_id', user.id)
-        .order('created_at', { ascending: false })
+      const { data: userPosts } = await withTimeout(
+        supabase
+          .from('posts')
+          .select('*, profiles(username, avatar_url, email)')
+          .eq('author_id', user.id)
+          .order('created_at', { ascending: false }),
+        12000,
+        'Loading your posts timed out'
+      )
 
       if (userPosts) {
         setPosts(userPosts)
@@ -41,23 +46,35 @@ export default function ProfilePage() {
         const postIds = userPosts.map((p) => p.id)
         let totalVotes = 0
         if (postIds.length > 0) {
-          const { count } = await supabase
-            .from('votes')
-            .select('*', { count: 'exact', head: true })
-            .in('post_id', postIds)
+          const { count } = await withTimeout(
+            supabase
+              .from('votes')
+              .select('*', { count: 'exact', head: true })
+              .in('post_id', postIds),
+            12000,
+            'Loading vote stats timed out'
+          )
           totalVotes = count || 0
         }
 
         // Followers / following counts & lists
-        const { data: followersData } = await supabase
-          .from('follows')
-          .select('follower:profiles!follower_id(id, username, avatar_url)')
-          .eq('following_id', user.id)
+        const { data: followersData } = await withTimeout(
+          supabase
+            .from('follows')
+            .select('follower:profiles!follower_id(id, username, avatar_url)')
+            .eq('following_id', user.id),
+          12000,
+          'Loading followers timed out'
+        )
 
-        const { data: followingData } = await supabase
-          .from('follows')
-          .select('following:profiles!following_id(id, username, avatar_url)')
-          .eq('follower_id', user.id)
+        const { data: followingData } = await withTimeout(
+          supabase
+            .from('follows')
+            .select('following:profiles!following_id(id, username, avatar_url)')
+            .eq('follower_id', user.id),
+          12000,
+          'Loading following timed out'
+        )
 
         const followersCount = followersData?.length || 0
         const followingCount = followingData?.length || 0
@@ -94,9 +111,13 @@ export default function ProfilePage() {
       const fileName = `${user.id}-${Math.random()}.${fileExt}`
       const filePath = `${fileName}`
 
-      const { error: uploadError } = await supabase.storage
-        .from('avatars')
-        .upload(filePath, file)
+      const { error: uploadError } = await withTimeout(
+        supabase.storage
+          .from('avatars')
+          .upload(filePath, file),
+        60000,
+        'Avatar upload timed out'
+      )
 
       if (uploadError) throw uploadError
 

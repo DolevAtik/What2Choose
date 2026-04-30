@@ -4,6 +4,7 @@ import { Suspense, lazy } from 'react'
 import { AuthProvider } from './contexts/AuthContext'
 import { useAuth } from './hooks/useAuth'
 import Navbar from './components/Navbar'
+import ErrorBoundary from './components/ErrorBoundary'
 
 const AuthPage = lazy(() => import('./pages/AuthPage'))
 const FeedPage = lazy(() => import('./pages/FeedPage'))
@@ -113,8 +114,10 @@ function AppRoutes() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <AppRoutes />
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <AppRoutes />
+      </AuthProvider>
+    </ErrorBoundary>
   )
 }

@@ -21,6 +21,7 @@ export default function CreatePostPage() {
   const [category, setCategory] = useState('')
   const [loading, setLoading] = useState(false)
   const [progressMsg, setProgressMsg] = useState('')
+  const [progressPct, setProgressPct] = useState(null)
   const [error, setError] = useState('')
 
   function addOption() {
@@ -41,7 +42,6 @@ export default function CreatePostPage() {
   }
 
   async function processImage(file) {
-    setProgressMsg(`Processing ${file.name}...`)
     return new Promise((resolve, reject) => {
       const reader = new FileReader()
       reader.onerror = () => reject(new Error('Failed to read file'))
@@ -65,12 +65,12 @@ export default function CreatePostPage() {
   }
 
   async function uploadToStorage(blob, path) {
-    const upload = supabase.storage.from('posts').upload(path, blob, { contentType: 'image/jpeg', upsert: true })
+    const upload = supabase.storage.from('post-images').upload(path, blob, { contentType: 'image/jpeg', upsert: true })
     // Increased timeout to 60s to allow for slower connections
     const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Upload timed out')), 60000))
     const { data, error } = await Promise.race([upload, timeout])
     if (error) throw error
-    const { data: { publicUrl } } = supabase.storage.from('posts').getPublicUrl(path)
+    const { data: { publicUrl } } = supabase.storage.from('post-images').getPublicUrl(path)
     return publicUrl
   }
 
@@ -85,21 +85,38 @@ export default function CreatePostPage() {
     if (!category) return setError('Please select a category')
 
     setLoading(true)
-    setProgressMsg(t('processingImages'))
+    setProgressPct(0)
+    setProgressMsg('Loading 0%')
 
     try {
       const ts = Date.now()
+      const totalSteps = images.length * 2 // process + upload per image
+      let doneSteps = 0
+
+      const bumpProgress = () => {
+        doneSteps += 1
+        const pct = Math.min(100, Math.floor((doneSteps / totalSteps) * 100))
+        setProgressPct(pct)
+        setProgressMsg(`Loading ${pct}%`)
+      }
       
       // Upload all images in parallel for better performance
-      setProgressMsg(t('uploading'))
       const uploadPromises = images.map(async (file, i) => {
+        // Step 1: process
         const blob = await processImage(file)
+        bumpProgress()
+        // Step 2: upload
         return uploadToStorage(blob, `${user.id}/${ts}_${OPTION_LETTERS[i].toLowerCase()}.jpg`)
+          .then((url) => {
+            bumpProgress()
+            return url
+          })
       })
 
       const urls = await Promise.all(uploadPromises)
 
-      setProgressMsg(t('savingPost'))
+      setProgressMsg('Loading 100%')
+      setProgressPct(100)
 
       const row = {
         author_id: user.id,
@@ -118,7 +135,7 @@ export default function CreatePostPage() {
     } catch (err) {
       console.error(err)
       if (err.message?.includes('bucket not found')) {
-        setError('Storage bucket "posts" not found.')
+        setError('Storage bucket "post-images" not found.')
       } else if (err.message?.includes('Policy')) {
         setError('Permission denied. Run the RLS SQL script in Supabase.')
       } else {
@@ -127,6 +144,7 @@ export default function CreatePostPage() {
     } finally {
       setLoading(false)
       setProgressMsg('')
+      setProgressPct(null)
     }
   }
 

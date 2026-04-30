@@ -94,7 +94,7 @@ export default function Navbar() {
         // But since SettingsPanel is inside the header and drawer is outside, 
         // we need to be careful. Check for data-settings-trigger or similar?
         // Let's just check if it's not a button in the top bar.
-        if (e.target.closest('[aria-label="settings"]')) return
+        if (e.target.closest('[data-settings-trigger="true"]')) return
         setSettingsOpen(false)
       }
     }
@@ -295,7 +295,7 @@ export default function Navbar() {
           {/* Settings hamburger */}
           <SettingsPanel
             open={settingsOpen}
-            onToggle={() => setSettingsOpen(!settingsOpen)}
+            onToggle={() => setSettingsOpen((prev) => !prev)}
           />
 
           {/* Desktop nav links */}

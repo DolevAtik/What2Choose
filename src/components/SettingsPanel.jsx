@@ -13,6 +13,7 @@ export default function SettingsPanel({ open, onToggle }) {
           : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'
         }`}
       aria-label={t('settings')}
+      data-settings-trigger="true"
     >
       <Settings className={`w-5 h-5 transition-all duration-300 ${open ? 'rotate-45 scale-110' : 'group-hover:rotate-45 group-hover:scale-110'}`} />
     </button>

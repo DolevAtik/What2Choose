@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Send, ArrowLeft, MessageCircle, Search, X, ExternalLink } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { withTimeout } from '../lib/withTimeout'
 import { useAuth } from '../hooks/useAuth'
 
 export default function ChatPage() {
@@ -81,10 +82,14 @@ export default function ChatPage() {
     setLoadingConvs(true)
     try {
       // 1. Fetch conversations where the user is user1 or user2 (RLS takes care of the filtering!)
-      const { data: convs, error } = await supabase
-        .from('conversations')
-        .select(`*`)
-        .order('created_at', { ascending: false })
+      const { data: convs, error } = await withTimeout(
+        supabase
+          .from('conversations')
+          .select(`*`)
+          .order('created_at', { ascending: false }),
+        12000,
+        'Loading conversations timed out'
+      )
 
       if (error) {
         console.error('Error loading conversations:', error)
@@ -103,10 +108,14 @@ export default function ChatPage() {
         // 2. Fetch profiles for all conversation participants
         const profilesMap = {}
         if (userIds.size > 0) {
-          const { data: profiles } = await supabase
-            .from('profiles')
-            .select('id, username, avatar_url')
-            .in('id', Array.from(userIds))
+          const { data: profiles } = await withTimeout(
+            supabase
+              .from('profiles')
+              .select('id, username, avatar_url')
+              .in('id', Array.from(userIds)),
+            12000,
+            'Loading chat profiles timed out'
+          )
           
           if (profiles) {
             profiles.forEach(p => { profilesMap[p.id] = p })
@@ -116,10 +125,14 @@ export default function ChatPage() {
         // 3. Fetch messages for all fetched conversations
         const messagesMap = {}
         if (convIds.length > 0) {
-          const { data: msgs } = await supabase
-            .from('messages')
-            .select('conversation_id, content, post_id, created_at, sender_id')
-            .in('conversation_id', convIds)
+          const { data: msgs } = await withTimeout(
+            supabase
+              .from('messages')
+              .select('conversation_id, content, post_id, created_at, sender_id')
+              .in('conversation_id', convIds),
+            12000,
+            'Loading chat messages timed out'
+          )
           
           if (msgs) {
             msgs.forEach(m => {
@@ -160,11 +173,15 @@ export default function ChatPage() {
 
   async function loadMessages(convId) {
     try {
-      const { data, error } = await supabase
-        .from('messages')
-        .select('*, post:posts(id, question, option_a_url, author:profiles!author_id(username))')
-        .eq('conversation_id', convId)
-        .order('created_at', { ascending: true })
+      const { data, error } = await withTimeout(
+        supabase
+          .from('messages')
+          .select('*, post:posts(id, question, option_a_url, author:profiles!author_id(username))')
+          .eq('conversation_id', convId)
+          .order('created_at', { ascending: true }),
+        12000,
+        'Loading messages timed out'
+      )
 
       if (error) {
         console.error('Error loading messages:', error)
@@ -180,23 +197,39 @@ export default function ChatPage() {
 
   async function openOrCreateConversation(otherUserId) {
     try {
-      const { data: existing } = await supabase
-        .from('conversations')
-        .select('*')
-        .or(`and(user1_id.eq.${user.id},user2_id.eq.${otherUserId}),and(user1_id.eq.${otherUserId},user2_id.eq.${user.id})`)
-        .maybeSingle()
+      const { data: existing } = await withTimeout(
+        supabase
+          .from('conversations')
+          .select('*')
+          .or(`and(user1_id.eq.${user.id},user2_id.eq.${otherUserId}),and(user1_id.eq.${otherUserId},user2_id.eq.${user.id})`)
+          .maybeSingle(),
+        12000,
+        'Opening conversation timed out'
+      )
 
       if (existing) {
         const otherId = existing.user1_id === user.id ? existing.user2_id : existing.user1_id
-        const { data: otherProfile } = await supabase.from('profiles').select('*').eq('id', otherId).single()
+        const { data: otherProfile } = await withTimeout(
+          supabase.from('profiles').select('*').eq('id', otherId).single(),
+          12000,
+          'Loading profile timed out'
+        )
         setSelectedConv({ ...existing, otherUser: otherProfile })
       } else {
-        const { data: newConv } = await supabase
-          .from('conversations')
-          .insert({ user1_id: user.id, user2_id: otherUserId })
-          .select()
-          .single()
-        const { data: otherProfile } = await supabase.from('profiles').select('*').eq('id', otherUserId).single()
+        const { data: newConv } = await withTimeout(
+          supabase
+            .from('conversations')
+            .insert({ user1_id: user.id, user2_id: otherUserId })
+            .select()
+            .single(),
+          12000,
+          'Creating conversation timed out'
+        )
+        const { data: otherProfile } = await withTimeout(
+          supabase.from('profiles').select('*').eq('id', otherUserId).single(),
+          12000,
+          'Loading profile timed out'
+        )
         if (newConv) {
           const conv = { ...newConv, otherUser: otherProfile, messages: [] }
           setConversations(prev => [conv, ...prev])
@@ -217,11 +250,15 @@ export default function ChatPage() {
     setNewMsg('')
 
     try {
-      const { error } = await supabase.from('messages').insert({
-        conversation_id: selectedConv.id,
-        sender_id: user.id,
-        content,
-      })
+      const { error } = await withTimeout(
+        supabase.from('messages').insert({
+          conversation_id: selectedConv.id,
+          sender_id: user.id,
+          content,
+        }),
+        12000,
+        'Sending message timed out'
+      )
 
       if (error) throw error
 
@@ -239,12 +276,16 @@ export default function ChatPage() {
   async function searchUsers(query) {
     if (!query.trim()) { setSearchResults([]); return }
     setSearching(true)
-    const { data } = await supabase
-      .from('profiles')
-      .select('id, username, avatar_url')
-      .ilike('username', `%${query}%`)
-      .neq('id', user.id)
-      .limit(8)
+    const { data } = await withTimeout(
+      supabase
+        .from('profiles')
+        .select('id, username, avatar_url')
+        .ilike('username', `%${query}%`)
+        .neq('id', user.id)
+        .limit(8),
+      12000,
+      'User search timed out'
+    )
     setSearchResults(data || [])
     setSearching(false)
   }

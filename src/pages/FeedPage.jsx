@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { Sparkles, Users, Globe, RefreshCw } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { withTimeout } from '../lib/withTimeout'
 import { useAuth } from '../hooks/useAuth'
 import { useSearchParams } from 'react-router-dom'
 import DecisionCard from '../components/DecisionCard'
@@ -20,6 +21,7 @@ export default function FeedPage() {
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [hasMore, setHasMore] = useState(true)
+  const [loadError, setLoadError] = useState('')
   const pageRef = useRef(0)
   const observerRef = useRef(null)
   const sentinelRef = useRef(null)
@@ -30,6 +32,7 @@ export default function FeedPage() {
     if (!reset && !hasMore) return
 
     reset ? setLoading(true) : setLoadingMore(true)
+    if (reset) setLoadError('')
 
     try {
       let query = supabase
@@ -50,10 +53,14 @@ export default function FeedPage() {
           return
         }
         
-        const { data: follows } = await supabase
-          .from('follows')
-          .select('following_id')
-          .eq('follower_id', user.id)
+        const { data: follows } = await withTimeout(
+          supabase
+            .from('follows')
+            .select('following_id')
+            .eq('follower_id', user.id),
+          12000,
+          'Loading follows timed out'
+        )
         
         const followingIds = (follows || []).map(f => f.following_id)
         if (followingIds.length === 0) {
@@ -64,7 +71,7 @@ export default function FeedPage() {
         query = query.in('author_id', followingIds)
       }
 
-      const { data, error } = await query
+      const { data, error } = await withTimeout(query, 12000, 'Loading posts timed out')
 
       if (error) throw error
 
@@ -79,6 +86,11 @@ export default function FeedPage() {
       }
     } catch (e) {
       console.error('fetchPosts failed:', e)
+      if (reset) {
+        setPosts([])
+        setHasMore(false)
+        setLoadError(e?.message || 'Failed to load feed')
+      }
     } finally {
       setLoading(false)
       setLoadingMore(false)
@@ -211,6 +223,23 @@ export default function FeedPage() {
 
       {/* Feed */}
       <div className="max-w-lg mx-auto px-4 pt-4 space-y-6">
+        {loadError && !loading && (
+          <div className="glass-panel p-4 border border-red-500/20 bg-red-500/5">
+            <p className="text-sm font-bold text-red-400 mb-2">Couldn’t load the feed</p>
+            <p className="text-xs text-gray-400 mb-4">{loadError}</p>
+            <button
+              onClick={() => {
+                pageRef.current = 0
+                setHasMore(true)
+                fetchPosts(true)
+              }}
+              className="btn-primary w-full"
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
         {loading ? (
           Array.from({ length: 3 }).map((_, i) => (
             <SkeletonCard key={i} />
