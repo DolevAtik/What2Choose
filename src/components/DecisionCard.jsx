@@ -645,7 +645,7 @@ export default function DecisionCard({ post }) {
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 12, scale: 0.98 }}
               transition={{ type: 'spring', damping: 25, stiffness: 260 }}
-              className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[92vw] max-w-md glass-panel !rounded-3xl shadow-[0_20px_80px_rgba(0,0,0,0.7)] border !border-white/10 z-[100] overflow-hidden"
+              className="fixed inset-x-3 top-20 bottom-6 md:inset-auto md:left-1/2 md:top-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:w-[92vw] md:max-w-md glass-panel !rounded-3xl shadow-[0_20px_80px_rgba(0,0,0,0.7)] border !border-white/10 z-[100] overflow-hidden flex flex-col"
             >
               <div className="px-5 py-4 border-b border-white/5 flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -657,7 +657,7 @@ export default function DecisionCard({ post }) {
                 </button>
               </div>
 
-              <div className="p-5 max-h-[70vh] overflow-y-auto custom-scrollbar">
+              <div className="p-5 flex-1 min-h-0 overflow-y-auto custom-scrollbar">
                 {votersLoading ? (
                   <div className="flex items-center justify-center py-10">
                     <span className="w-6 h-6 border-2 border-primary-500/30 border-t-primary-500 rounded-full animate-spin" />
