@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { MessageCircle, Share2, ChevronDown, ChevronUp, CheckCircle, Heart, Send, X, Search, Trash2 } from 'lucide-react'
+import { MessageCircle, Share2, ChevronDown, ChevronUp, CheckCircle, Heart, Send, X, Search, Trash2, Users } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import confetti from 'canvas-confetti'
@@ -34,16 +34,21 @@ export default function DecisionCard({ post }) {
   const [chatSending, setChatSending] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [isDeleted, setIsDeleted] = useState(false)
+  // Voters modal (author-only)
+  const [showVoters, setShowVoters] = useState(false)
+  const [votersLoading, setVotersLoading] = useState(false)
+  const [votersError, setVotersError] = useState('')
+  const [voters, setVoters] = useState([]) // { choice, user_id, profiles: { username, avatar_url, email } }
   const shareMenuRef = useRef(null)
 
   const hasLoaded = useRef(false)
 
   // Build options list from post fields
   const options = [
-    { letter: 'A', url: post.option_a_url },
-    { letter: 'B', url: post.option_b_url },
-    post.option_c_url ? { letter: 'C', url: post.option_c_url } : null,
-    post.option_d_url ? { letter: 'D', url: post.option_d_url } : null,
+    { letter: 'A', url: post.option_a_url, text: post.option_a_text },
+    { letter: 'B', url: post.option_b_url, text: post.option_b_text },
+    post.option_c_url || post.option_c_text ? { letter: 'C', url: post.option_c_url, text: post.option_c_text } : null,
+    post.option_d_url || post.option_d_text ? { letter: 'D', url: post.option_d_url, text: post.option_d_text } : null,
   ].filter(Boolean)
 
   const optionCount = options.length
@@ -92,6 +97,29 @@ export default function DecisionCard({ post }) {
     setCommentCount(cCnt || 0)
   }
 
+  async function openVoters() {
+    if (!user || user.id !== post.author_id) return
+    setShowVoters(true)
+    if (voters.length > 0 || votersLoading) return
+
+    setVotersLoading(true)
+    setVotersError('')
+    try {
+      const { data, error } = await supabase
+        .from('votes')
+        .select('choice, user_id, profiles(username, avatar_url, email)')
+        .eq('post_id', post.id)
+        .order('created_at', { ascending: false })
+
+      if (error) throw error
+      setVoters(data || [])
+    } catch (e) {
+      console.error('Failed to load voters:', e)
+      setVotersError(e?.message || 'Failed to load voters')
+    } finally {
+      setVotersLoading(false)
+    }
+  }
 
   async function vote(choice) {
     if (!user || userVote || voting) return
@@ -277,6 +305,7 @@ export default function DecisionCard({ post }) {
           const isLast = opt.letter === options[options.length - 1].letter
           // Special center layout for 3rd option when count=3
           const isThirdOfThree = optionCount === 3 && opt.letter === 'C'
+          const isTextOption = !opt.url && !!opt.text
 
           return (
             <motion.button
@@ -294,12 +323,20 @@ export default function DecisionCard({ post }) {
               `}
               aria-label={`Vote for option ${opt.letter}`}
             >
-              <motion.img
-                layoutId={`img-${post.id}-${opt.letter}`}
-                src={opt.url}
-                alt={`Option ${opt.letter}`}
-                className="w-full h-full object-cover"
-              />
+              {isTextOption ? (
+                <div className="w-full h-full bg-gradient-to-br from-gray-900/90 to-black/90 flex items-center justify-center p-4">
+                  <p className="text-center text-base md:text-lg font-black text-gray-100 leading-snug line-clamp-5">
+                    {opt.text}
+                  </p>
+                </div>
+              ) : (
+                <motion.img
+                  layoutId={`img-${post.id}-${opt.letter}`}
+                  src={opt.url}
+                  alt={`Option ${opt.letter}`}
+                  className="w-full h-full object-cover"
+                />
+              )}
 
               {/* Pre-vote overlay */}
               {!showResult && (
@@ -392,6 +429,18 @@ export default function DecisionCard({ post }) {
 
         {total > 0 && (
           <span className="text-xs font-bold text-gray-500 ml-1 tracking-wide uppercase hidden sm:block">{t('votesTotal', { n: total })}</span>
+        )}
+
+        {/* Author-only: view voters */}
+        {user?.id === post.author_id && (
+          <button
+            onClick={openVoters}
+            className="flex items-center gap-2 text-gray-300 hover:text-white transition-all duration-300 py-1.5 px-3 rounded-xl hover:bg-white/10 text-sm font-semibold group"
+            title={t('viewVotes')}
+          >
+            <Users className="w-4 h-4 group-hover:scale-110 transition-transform" />
+            <span className="hidden sm:inline">{t('viewVotes')}</span>
+          </button>
         )}
 
         <div className="flex-1" />
@@ -500,6 +549,91 @@ export default function DecisionCard({ post }) {
           >
             <CommentSection postId={post.id} onCountChange={setCommentCount} />
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Voters Modal */}
+      <AnimatePresence>
+        {showVoters && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowVoters(false)}
+              className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[90]"
+            />
+            <motion.div
+              initial={{ opacity: 0, y: 12, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 12, scale: 0.98 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 260 }}
+              className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[92vw] max-w-md glass-panel !rounded-3xl shadow-[0_20px_80px_rgba(0,0,0,0.7)] border !border-white/10 z-[100] overflow-hidden"
+            >
+              <div className="px-5 py-4 border-b border-white/5 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Users className="w-4 h-4 text-primary-400" />
+                  <span className="text-sm font-black text-gray-100 uppercase tracking-wider">{t('voters')}</span>
+                </div>
+                <button onClick={() => setShowVoters(false)} className="p-2 rounded-full hover:bg-white/10 text-gray-400 hover:text-white transition-all">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="p-5 max-h-[70vh] overflow-y-auto custom-scrollbar">
+                {votersLoading ? (
+                  <div className="flex items-center justify-center py-10">
+                    <span className="w-6 h-6 border-2 border-primary-500/30 border-t-primary-500 rounded-full animate-spin" />
+                  </div>
+                ) : votersError ? (
+                  <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl">
+                    <p className="text-sm font-bold text-red-400 mb-1">{t('error')}</p>
+                    <p className="text-xs text-gray-400 whitespace-pre-wrap">{votersError}</p>
+                    <button onClick={() => { setVoters([]); openVoters() }} className="btn-primary w-full mt-4">
+                      {t('retry')}
+                    </button>
+                  </div>
+                ) : voters.length === 0 ? (
+                  <p className="text-sm text-gray-400 text-center py-10">{t('noVotesYet')}</p>
+                ) : (
+                  <div className="space-y-4">
+                    {options.map((opt) => {
+                      const group = voters.filter(v => v.choice === opt.letter)
+                      if (group.length === 0) return null
+                      return (
+                        <div key={opt.letter} className="rounded-2xl border border-white/10 bg-white/5 overflow-hidden">
+                          <div className="px-4 py-2.5 flex items-center justify-between border-b border-white/5">
+                            <span className="text-xs font-black text-gray-200 tracking-widest uppercase">Option {opt.letter}</span>
+                            <span className="text-xs font-bold text-gray-400">{group.length}</span>
+                          </div>
+                          <div className="p-3 space-y-2">
+                            {group.map((v) => {
+                              const name = v.profiles?.username || v.profiles?.email?.split('@')[0] || 'User'
+                              const avatar = v.profiles?.avatar_url
+                              return (
+                                <div key={`${v.user_id}-${opt.letter}`} className="flex items-center gap-3 p-2 rounded-xl hover:bg-white/5 transition-colors">
+                                  <div className="w-9 h-9 rounded-full bg-gradient-to-br from-primary-600 to-accent-600 flex items-center justify-center overflow-hidden shrink-0">
+                                    {avatar ? (
+                                      <img src={avatar} alt={name} className="w-full h-full object-cover" />
+                                    ) : (
+                                      <span className="text-white text-sm font-bold">{name[0]?.toUpperCase()}</span>
+                                    )}
+                                  </div>
+                                  <div className="min-w-0">
+                                    <p className="text-sm font-bold text-gray-100 truncate">@{name}</p>
+                                  </div>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </>
         )}
       </AnimatePresence>
     </motion.article>

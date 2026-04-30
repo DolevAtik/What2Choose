@@ -17,8 +17,11 @@ export default function CreatePostPage() {
   const { t } = useLanguage()
 
   const [question, setQuestion] = useState('')
+  const [optionType, setOptionType] = useState('images') // 'images' | 'text'
   // images is an array of 2–4 File|null values
   const [images, setImages] = useState([null, null])
+  // texts is an array of 2–4 string values
+  const [texts, setTexts] = useState(['', ''])
   const [category, setCategory] = useState('')
   const [loading, setLoading] = useState(false)
   const [progressMsg, setProgressMsg] = useState('')
@@ -26,18 +29,35 @@ export default function CreatePostPage() {
   const [error, setError] = useState('')
 
   function addOption() {
-    if (images.length < 4) setImages(prev => [...prev, null])
+    if (optionType === 'images') {
+      if (images.length < 4) setImages(prev => [...prev, null])
+    } else {
+      if (texts.length < 4) setTexts(prev => [...prev, ''])
+    }
   }
 
   function removeOption(idx) {
-    if (images.length <= 2) return
-    setImages(prev => prev.filter((_, i) => i !== idx))
+    if (optionType === 'images') {
+      if (images.length <= 2) return
+      setImages(prev => prev.filter((_, i) => i !== idx))
+    } else {
+      if (texts.length <= 2) return
+      setTexts(prev => prev.filter((_, i) => i !== idx))
+    }
   }
 
   function setImage(idx, file) {
     setImages(prev => {
       const next = [...prev]
       next[idx] = file
+      return next
+    })
+  }
+
+  function setText(idx, value) {
+    setTexts(prev => {
+      const next = [...prev]
+      next[idx] = value
       return next
     })
   }
@@ -95,8 +115,14 @@ export default function CreatePostPage() {
     setError('')
 
     if (!question.trim()) return setError('Please enter your question')
-    for (let i = 0; i < images.length; i++) {
-      if (!images[i]) return setError(`Please upload Option ${OPTION_LETTERS[i]}`)
+    if (optionType === 'images') {
+      for (let i = 0; i < images.length; i++) {
+        if (!images[i]) return setError(`Please upload Option ${OPTION_LETTERS[i]}`)
+      }
+    } else {
+      for (let i = 0; i < texts.length; i++) {
+        if (!texts[i]?.trim()) return setError(`Please enter Option ${OPTION_LETTERS[i]}`)
+      }
     }
     if (!category) return setError('Please select a category')
 
@@ -106,7 +132,8 @@ export default function CreatePostPage() {
 
     try {
       const ts = Date.now()
-      const totalSteps = images.length * 2 // process + upload per image
+      const optionCount = optionType === 'images' ? images.length : texts.length
+      const totalSteps = optionType === 'images' ? optionCount * 2 : 1
       let doneSteps = 0
 
       const bumpProgress = () => {
@@ -134,23 +161,27 @@ export default function CreatePostPage() {
         'Preparing your profile timed out'
       )
 
-      // Upload all images in parallel for better performance
-      const uploadPromises = images.map(async (file, i) => {
-        // Step 1: process
-        const blob = await processImage(file)
+      let urls = []
+      if (optionType === 'images') {
+        // Upload all images in parallel for better performance
+        const uploadPromises = images.map(async (file, i) => {
+          // Step 1: process
+          const blob = await processImage(file)
+          bumpProgress()
+          // Step 2: upload
+          const unique =
+            (globalThis.crypto?.randomUUID?.() || `${Math.random().toString(16).slice(2)}${Math.random().toString(16).slice(2)}`)
+          const path = `${user.id}/${ts}_${unique}_${OPTION_LETTERS[i].toLowerCase()}.jpg`
+          return uploadToStorage(blob, path)
+            .then((url) => {
+              bumpProgress()
+              return url
+            })
+        })
+        urls = await Promise.all(uploadPromises)
+      } else {
         bumpProgress()
-        // Step 2: upload
-        const unique =
-          (globalThis.crypto?.randomUUID?.() || `${Math.random().toString(16).slice(2)}${Math.random().toString(16).slice(2)}`)
-        const path = `${user.id}/${ts}_${unique}_${OPTION_LETTERS[i].toLowerCase()}.jpg`
-        return uploadToStorage(blob, path)
-          .then((url) => {
-            bumpProgress()
-            return url
-          })
-      })
-
-      const urls = await Promise.all(uploadPromises)
+      }
 
       setProgressMsg('Loading 100%')
       setProgressPct(100)
@@ -158,14 +189,20 @@ export default function CreatePostPage() {
       const row = {
         author_id: user.id,
         question: question.trim(),
-        option_a_url: urls[0],
-        option_b_url: urls[1],
         category,
       }
-      // Backward-compatible: only include C/D columns when present.
-      // If the DB is still on schema v1 (no option_c_url/option_d_url), sending them will fail the insert.
-      if (urls[2]) row.option_c_url = urls[2]
-      if (urls[3]) row.option_d_url = urls[3]
+      if (optionType === 'images') {
+        row.option_a_url = urls[0]
+        row.option_b_url = urls[1]
+        if (urls[2]) row.option_c_url = urls[2]
+        if (urls[3]) row.option_d_url = urls[3]
+      } else {
+        // Text-only options (requires schema_v4.sql in Supabase)
+        row.option_a_text = texts[0].trim()
+        row.option_b_text = texts[1].trim()
+        if (texts[2]?.trim()) row.option_c_text = texts[2].trim()
+        if (texts[3]?.trim()) row.option_d_text = texts[3].trim()
+      }
 
       const { error: insertError } = await supabase.from('posts').insert(row)
       if (insertError) throw new Error(`Database error: ${insertError.message}`)
@@ -179,6 +216,8 @@ export default function CreatePostPage() {
         setError('Storage bucket not found (expected "post-images" or "posts").')
       } else if (msg.includes('option_c_url') || msg.includes('option_d_url')) {
         setError('Your Supabase database is missing columns for 3–4 options. Please run `supabase/schema_v3.sql` in Supabase SQL editor.')
+      } else if (msg.includes('option_a_text') || msg.includes('option_b_text') || msg.includes('option_c_text') || msg.includes('option_d_text')) {
+        setError('Your Supabase database is missing text option columns. Please run `supabase/schema_v4.sql` in Supabase SQL editor.')
       } else if (err.message?.includes('Policy')) {
         setError(`Permission denied. ${details || 'Run the RLS SQL script in Supabase.'}`)
       } else if (msg.toLowerCase().includes('foreign key') || msg.toLowerCase().includes('profiles')) {
@@ -207,9 +246,9 @@ export default function CreatePostPage() {
   }
 
   // Grid layout: 2→2col, 3→2+1 centered, 4→2x2
-  const gridClass = images.length === 4
+  const gridClass = (optionType === 'images' ? images.length : texts.length) === 4
     ? 'grid-cols-2'
-    : images.length === 3
+    : (optionType === 'images' ? images.length : texts.length) === 3
       ? 'grid-cols-2'
       : 'grid-cols-2'
 
@@ -256,13 +295,44 @@ export default function CreatePostPage() {
             <p className="text-xs font-semibold text-gray-500 text-right">{question.length}/200</p>
           </div>
 
+          {/* Option Type */}
+          <div className="space-y-2">
+            <label className="text-sm font-bold text-gray-200 tracking-wide uppercase">
+              {t('optionType')}
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setOptionType('images')}
+                className={`py-3 rounded-xl text-sm font-bold uppercase tracking-wider transition-all duration-300 border
+                  ${optionType === 'images'
+                    ? 'bg-gradient-to-br from-primary-600/20 to-accent-600/20 border-primary-500 text-primary-300 shadow-[0_0_15px_rgba(139,92,246,0.2)] scale-[1.02]'
+                    : 'bg-black/40 border-white/5 text-gray-500 hover:border-white/10 hover:text-gray-300 hover:bg-surface'
+                  }`}
+              >
+                {t('optionTypeImages')}
+              </button>
+              <button
+                type="button"
+                onClick={() => setOptionType('text')}
+                className={`py-3 rounded-xl text-sm font-bold uppercase tracking-wider transition-all duration-300 border
+                  ${optionType === 'text'
+                    ? 'bg-gradient-to-br from-primary-600/20 to-accent-600/20 border-primary-500 text-primary-300 shadow-[0_0_15px_rgba(139,92,246,0.2)] scale-[1.02]'
+                    : 'bg-black/40 border-white/5 text-gray-500 hover:border-white/10 hover:text-gray-300 hover:bg-surface'
+                  }`}
+              >
+                {t('optionTypeText')}
+              </button>
+            </div>
+          </div>
+
           {/* Options Grid */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <label className="text-sm font-bold text-gray-200 tracking-wide uppercase">
-                Options <span className="text-xs text-gray-500 normal-case font-medium ml-1">({images.length}/4)</span>
+                Options <span className="text-xs text-gray-500 normal-case font-medium ml-1">({optionType === 'images' ? images.length : texts.length}/4)</span>
               </label>
-              {images.length < 4 && (
+              {(optionType === 'images' ? images.length : texts.length) < 4 && (
                 <motion.button
                   type="button"
                   onClick={addOption}
@@ -277,21 +347,36 @@ export default function CreatePostPage() {
 
             <div className={`grid ${gridClass} gap-3`}>
               <AnimatePresence mode="popLayout">
-                {images.map((img, idx) => (
+                {(optionType === 'images' ? images : texts).map((val, idx) => (
                   <motion.div
                     key={idx}
                     layout
                     initial={{ opacity: 0, scale: 0.9 }}
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.9 }}
-                    className={`relative ${images.length === 3 && idx === 2 ? 'col-span-2 max-w-[50%] mx-auto w-full' : ''}`}
+                    className={`relative ${(optionType === 'images' ? images.length : texts.length) === 3 && idx === 2 ? 'col-span-2 max-w-[50%] mx-auto w-full' : ''}`}
                   >
-                    <ImageUpload
-                      id={`option-${OPTION_LETTERS[idx].toLowerCase()}-upload`}
-                      label={t('optionLabel', { letter: OPTION_LETTERS[idx] })}
-                      value={img}
-                      onChange={(file) => setImage(idx, file)}
-                    />
+                    {optionType === 'images' ? (
+                      <ImageUpload
+                        id={`option-${OPTION_LETTERS[idx].toLowerCase()}-upload`}
+                        label={t('optionLabel', { letter: OPTION_LETTERS[idx] })}
+                        value={val}
+                        onChange={(file) => setImage(idx, file)}
+                      />
+                    ) : (
+                      <div className="space-y-2">
+                        <label className="text-xs font-black text-gray-300 tracking-wider uppercase">
+                          {t('optionLabel', { letter: OPTION_LETTERS[idx] })}
+                        </label>
+                        <input
+                          value={val}
+                          onChange={(e) => setText(idx, e.target.value)}
+                          placeholder={t('optionTextPlaceholder', { letter: OPTION_LETTERS[idx] })}
+                          maxLength={80}
+                          className="input-base bg-black/40 shadow-inner"
+                        />
+                      </div>
+                    )}
                     {/* Remove button (only for C and D) */}
                     {idx >= 2 && (
                       <button

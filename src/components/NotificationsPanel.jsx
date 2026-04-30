@@ -1,34 +1,42 @@
 import { useState, useEffect, useRef } from 'react'
-import { Bell, Vote, MessageCircle, UserPlus, X, CheckCheck } from 'lucide-react'
+import { Bell, Vote, MessageCircle, UserPlus, X, CheckCheck, Heart } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
+import { useLanguage } from '../contexts/LanguageContext'
 
 const TYPE_CONFIG = {
   vote: {
     icon: Vote,
     color: 'text-accent-400',
     bg: 'bg-accent-500/10',
-    label: 'voted on your decision',
+    labelKey: 'votedOnDecision',
   },
   comment: {
     icon: MessageCircle,
     color: 'text-primary-400',
     bg: 'bg-primary-500/10',
-    label: 'commented on your decision',
+    labelKey: 'commentedOnDecision',
   },
   follow: {
     icon: UserPlus,
     color: 'text-emerald-400',
     bg: 'bg-emerald-500/10',
-    label: 'started following you',
+    labelKey: 'startedFollowing',
+  },
+  like: {
+    icon: Heart,
+    color: 'text-pink-400',
+    bg: 'bg-pink-500/10',
+    labelKey: 'likedYourPost',
   },
 }
 
 export default function NotificationsPanel() {
   const { user } = useAuth()
   const navigate = useNavigate()
+  const { t } = useLanguage()
   const panelRef = useRef(null)
 
   const [open, setOpen] = useState(false)
@@ -129,7 +137,7 @@ export default function NotificationsPanel() {
       <button
         onClick={handleOpen}
         className="relative p-2 rounded-xl text-gray-400 hover:text-gray-200 hover:bg-white/5 transition-all duration-200 group"
-        aria-label="Notifications"
+        aria-label={t('notifications')}
       >
         <Bell className="w-5 h-5 group-hover:scale-110 transition-transform" />
         <AnimatePresence>
@@ -155,13 +163,13 @@ export default function NotificationsPanel() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -8, scale: 0.97 }}
             transition={{ duration: 0.15, ease: [0.22, 1, 0.36, 1] }}
-            className="absolute right-0 top-12 w-[340px] glass-panel !rounded-2xl overflow-hidden shadow-[0_16px_60px_rgba(0,0,0,0.6)] border !border-white/10 z-50"
+            className="absolute right-0 top-12 w-[340px] !rounded-2xl overflow-hidden shadow-[0_16px_60px_rgba(0,0,0,0.75)] border border-white/10 z-50 bg-gray-950/95 backdrop-blur-xl"
           >
             {/* Header */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-white/5">
               <div className="flex items-center gap-2">
                 <Bell className="w-4 h-4 text-primary-400" />
-                <span className="text-sm font-bold text-gray-100">Notifications</span>
+                <span className="text-sm font-bold text-gray-100">{t('notifications')}</span>
               </div>
               <div className="flex items-center gap-2">
                 {notifications.some(n => !n.read) && (
@@ -170,7 +178,7 @@ export default function NotificationsPanel() {
                     className="flex items-center gap-1 text-xs text-primary-400 hover:text-primary-300 font-semibold transition-colors"
                   >
                     <CheckCheck className="w-3.5 h-3.5" />
-                    Mark all read
+                    {t('markAllRead')}
                   </button>
                 )}
                 <button
@@ -187,8 +195,8 @@ export default function NotificationsPanel() {
               {notifications.length === 0 ? (
                 <div className="py-12 text-center">
                   <Bell className="w-8 h-8 text-gray-700 mx-auto mb-3" />
-                  <p className="text-sm font-medium text-gray-500">No notifications yet</p>
-                  <p className="text-xs text-gray-600 mt-1">They'll appear here when people vote or comment</p>
+                  <p className="text-sm font-medium text-gray-500">{t('noNotifications')}</p>
+                  <p className="text-xs text-gray-600 mt-1">{t('noNotificationsDesc')}</p>
                 </div>
               ) : (
                 notifications.map((notif, i) => {
@@ -224,7 +232,7 @@ export default function NotificationsPanel() {
                       <div className="flex-1 min-w-0">
                         <p className="text-sm text-gray-200 leading-snug">
                           <span className="font-bold">{actorName}</span>{' '}
-                          <span className="text-gray-400">{config.label}</span>
+                          <span className="text-gray-400">{t(config.labelKey)}</span>
                         </p>
                         <p className="text-xs text-gray-600 mt-0.5">{timeAgo(notif.created_at)}</p>
                       </div>

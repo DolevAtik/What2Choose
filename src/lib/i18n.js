@@ -39,6 +39,10 @@ export const translations = {
     uploadingImage: 'Uploading image {n}...',
     savingPost: 'Saving post...',
     tipText: 'Post 2–4 options and let the world vote. The more specific your question, the better!',
+    optionType: 'Option Type',
+    optionTypeImages: 'Images',
+    optionTypeText: 'Text',
+    optionTextPlaceholder: 'Type option {letter}...',
 
     // Image Upload
     clickToUpload: 'Click to upload',
@@ -84,6 +88,9 @@ export const translations = {
     commentedOnDecision: 'commented on your decision',
     startedFollowing: 'started following you',
     likedYourPost: 'liked your decision',
+    viewVotes: 'View votes',
+    voters: 'Voters',
+    noVotesYet: 'No votes yet',
 
     // General
     back: 'Back',
@@ -132,6 +139,10 @@ export const translations = {
     uploadingImage: 'מעלה תמונה {n}...',
     savingPost: 'שומר פוסט...',
     tipText: 'פרסם 2–4 אפשרויות ותן לעולם להכריע. ככל שהשאלה ספציפית יותר, כך התוצאות טובות יותר!',
+    optionType: 'סוג אפשרויות',
+    optionTypeImages: 'תמונות',
+    optionTypeText: 'טקסט',
+    optionTextPlaceholder: 'כתוב אפשרות {letter}...',
 
     // Image Upload
     clickToUpload: 'לחץ להעלאה',
@@ -177,6 +188,9 @@ export const translations = {
     commentedOnDecision: 'הגיב על ההחלטה שלך',
     startedFollowing: 'התחיל לעקוב אחריך',
     likedYourPost: 'אהב את ההחלטה שלך',
+    viewVotes: 'מי הצביע',
+    voters: 'מצביעים',
+    noVotesYet: 'אין הצבעות עדיין',
 
     // General
     back: 'חזרה',

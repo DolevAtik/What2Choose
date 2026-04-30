@@ -35,7 +35,7 @@ create table if not exists public.notifications (
   id           uuid primary key default uuid_generate_v4(),
   recipient_id uuid not null references public.profiles(id) on delete cascade,
   actor_id     uuid references public.profiles(id) on delete set null,
-  type         text not null check (type in ('vote', 'comment', 'follow')),
+  type         text not null check (type in ('vote', 'comment', 'follow', 'like')),
   post_id      uuid references public.posts(id) on delete cascade,
   read         boolean default false,
   created_at   timestamptz default now()

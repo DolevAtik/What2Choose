@@ -63,7 +63,7 @@ BEGIN
     SELECT author_id INTO post_author FROM public.posts WHERE id = NEW.post_id;
     IF post_author IS NOT NULL AND post_author <> NEW.user_id THEN
       INSERT INTO public.notifications (recipient_id, actor_id, type, post_id)
-      VALUES (post_author, NEW.user_id, 'vote', NEW.post_id);
+      VALUES (post_author, NEW.user_id, 'like', NEW.post_id);
     END IF;
   END IF;
   RETURN NEW;
