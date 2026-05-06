@@ -213,7 +213,7 @@ export default function ChatPage() {
       if (existing) {
         const otherId = existing.user1_id === user.id ? existing.user2_id : existing.user1_id
         const { data: otherProfile } = await withTimeout(
-          supabase.from('profiles').select('*').eq('id', otherId).single(),
+          supabase.from('profiles').select('id, username, avatar_url, created_at').eq('id', otherId).single(),
           12000,
           'Loading profile timed out'
         )
@@ -229,7 +229,7 @@ export default function ChatPage() {
           'Creating conversation timed out'
         )
         const { data: otherProfile } = await withTimeout(
-          supabase.from('profiles').select('*').eq('id', otherUserId).single(),
+          supabase.from('profiles').select('id, username, avatar_url, created_at').eq('id', otherUserId).single(),
           12000,
           'Loading profile timed out'
         )
