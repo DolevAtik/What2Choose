@@ -33,7 +33,7 @@ export default function ProfilePage() {
       const { data: userPosts } = await withTimeout(
         supabase
           .from('posts')
-          .select('*, profiles(username, avatar_url, email)')
+          .select('*, profiles(username, avatar_url)')
           .eq('author_id', user.id)
           .order('created_at', { ascending: false }),
         12000,

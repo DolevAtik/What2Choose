@@ -42,7 +42,7 @@ export default function DecisionCard({ post }) {
   const [showVoters, setShowVoters] = useState(false)
   const [votersLoading, setVotersLoading] = useState(false)
   const [votersError, setVotersError] = useState('')
-  const [voters, setVoters] = useState([]) // { choice, user_id, profiles: { username, avatar_url, email } }
+  const [voters, setVoters] = useState([]) // { choice, user_id, profiles: { username, avatar_url } }
   const shareMenuRef = useRef(null)
 
   const hasLoaded = useRef(false)
@@ -152,7 +152,7 @@ export default function DecisionCard({ post }) {
     try {
       const { data, error } = await supabase
         .from('votes')
-        .select('choice, user_id, profiles(username, avatar_url, email)')
+        .select('choice, user_id, profiles(username, avatar_url)')
         .eq('post_id', post.id)
         .order('created_at', { ascending: false })
 
@@ -278,7 +278,7 @@ export default function DecisionCard({ post }) {
     }
   }
 
-  const authorName = post.profiles?.username || post.profiles?.email?.split('@')[0] || 'User'
+  const authorName = post.profiles?.username || 'User'
   const avatarUrl = post.profiles?.avatar_url
 
   // Layout grid class
@@ -692,7 +692,7 @@ export default function DecisionCard({ post }) {
                           </div>
                           <div className="p-3 space-y-2">
                             {group.map((v) => {
-                              const name = v.profiles?.username || v.profiles?.email?.split('@')[0] || 'User'
+                              const name = v.profiles?.username || 'User'
                               const avatar = v.profiles?.avatar_url
                               return (
                                 <div key={`${v.user_id}-${opt.letter}`} className="flex items-center gap-3 p-2 rounded-xl hover:bg-white/5 transition-colors">

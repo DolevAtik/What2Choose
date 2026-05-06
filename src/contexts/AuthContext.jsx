@@ -63,7 +63,7 @@ export function AuthProvider({ children }) {
     const { data: existingProfile } = await withTimeout(
       supabase
         .from('profiles')
-        .select('*')
+        .select('id, username, avatar_url, created_at')
         .eq('id', currentUser.id)
         .single(),
       12000,
@@ -90,7 +90,7 @@ export function AuthProvider({ children }) {
           avatar_url: currentUser.user_metadata?.avatar_url || null,
           email: currentUser.email,
         })
-        .select()
+        .select('id, username, avatar_url, created_at')
         .single(),
       12000,
       'Creating profile timed out'
@@ -104,7 +104,7 @@ export function AuthProvider({ children }) {
   async function fetchProfile(userId) {
     const { data, error } = await supabase
       .from('profiles')
-      .select('*')
+      .select('id, username, avatar_url, created_at')
       .eq('id', userId)
       .single()
 
@@ -162,7 +162,7 @@ export function AuthProvider({ children }) {
     const { data, error } = await supabase
       .from('profiles')
       .upsert({ id: user.id, ...updates })
-      .select()
+      .select('id, username, avatar_url, created_at')
       .single()
     if (error) throw error
     setProfile(data)

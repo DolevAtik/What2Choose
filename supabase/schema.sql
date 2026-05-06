@@ -77,6 +77,11 @@ drop policy if exists "Users can insert own profile" on public.profiles;
 create policy "Users can insert own profile" on public.profiles
   for insert with check (auth.uid() = id);
 
+-- Profiles contain private email addresses used to seed accounts. Keep the
+-- public RLS policy for usernames/avatars, but do not grant table-wide SELECT.
+revoke select on public.profiles from public, anon, authenticated;
+grant select (id, username, avatar_url, created_at) on public.profiles to anon, authenticated;
+
 -- Posts: public read, auth insert, owner delete
 drop policy if exists "Posts are public" on public.posts;
 create policy "Posts are public" on public.posts
