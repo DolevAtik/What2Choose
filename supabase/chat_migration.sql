@@ -25,6 +25,15 @@ CREATE TABLE IF NOT EXISTS messages (
   CHECK (content IS NOT NULL OR post_id IS NOT NULL)
 );
 
+-- Existing deployments may have created this FK without a delete action.
+-- Shared chat messages should not block authors from deleting their own posts.
+ALTER TABLE public.messages
+  DROP CONSTRAINT IF EXISTS messages_post_id_fkey;
+
+ALTER TABLE public.messages
+  ADD CONSTRAINT messages_post_id_fkey
+  FOREIGN KEY (post_id) REFERENCES public.posts(id) ON DELETE CASCADE;
+
 -- 3. Row Level Security
 ALTER TABLE conversations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE messages      ENABLE ROW LEVEL SECURITY;
