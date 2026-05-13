@@ -269,11 +269,13 @@ export default function DecisionCard({ post }) {
     if (!window.confirm(t('confirmDeletePost'))) return
     setIsDeleting(true)
     try {
-      await supabase.from('posts').delete().eq('id', post.id)
+      const { error } = await supabase.from('posts').delete().eq('id', post.id)
+      if (error) throw error
       setIsDeleted(true)
     } catch (err) {
       console.error('Error deleting post:', err)
       toast.error(t('failedToDeletePost'))
+    } finally {
       setIsDeleting(false)
     }
   }
