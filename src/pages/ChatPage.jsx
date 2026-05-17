@@ -250,7 +250,6 @@ export default function ChatPage() {
     if (!newMsg.trim() || !selectedConv || sending) return
     setSending(true)
     const content = newMsg.trim()
-    setNewMsg('')
 
     try {
       const { error } = await withTimeout(
@@ -265,6 +264,7 @@ export default function ChatPage() {
 
       if (error) throw error
 
+      setNewMsg('')
       // Fetch the updated messages list immediately as a fallback if Realtime is delayed
       loadMessages(selectedConv.id)
     } catch (err) {
