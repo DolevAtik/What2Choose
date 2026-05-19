@@ -19,11 +19,18 @@ CREATE TABLE IF NOT EXISTS messages (
   conversation_id uuid REFERENCES conversations(id) ON DELETE CASCADE NOT NULL,
   sender_id       uuid REFERENCES auth.users NOT NULL,
   content         text,                          -- null when sharing a post
-  post_id         uuid REFERENCES posts(id),     -- null for text messages
+  post_id         uuid REFERENCES posts(id) ON DELETE CASCADE, -- null for text messages
   read            boolean DEFAULT false,
   created_at      timestamptz DEFAULT now(),
   CHECK (content IS NOT NULL OR post_id IS NOT NULL)
 );
+
+-- Existing installs may already have the default NO ACTION FK, which blocks deleting
+-- posts after they have been shared in chat.
+ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_post_id_fkey;
+ALTER TABLE messages
+  ADD CONSTRAINT messages_post_id_fkey
+  FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE CASCADE;
 
 -- 3. Row Level Security
 ALTER TABLE conversations ENABLE ROW LEVEL SECURITY;
