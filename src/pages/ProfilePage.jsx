@@ -109,8 +109,9 @@ export default function ProfilePage() {
 
       const file = event.target.files[0]
       const fileExt = file.name.split('.').pop()
-      const fileName = `${user.id}-${Math.random()}.${fileExt}`
-      const filePath = `${fileName}`
+      const unique =
+        (globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`)
+      const filePath = `${user.id}/${unique}.${fileExt}`
 
       const { error: uploadError } = await withTimeout(
         supabase.storage

@@ -144,7 +144,8 @@ export default function CreatePostPage() {
       }
       
       // Ensure profile exists before inserting posts (FK: posts.author_id -> profiles.id)
-      await withTimeout(
+      // Ignore existing rows so creating a post never overwrites profile edits.
+      const { error: profileError } = await withTimeout(
         supabase
           .from('profiles')
           .upsert({
@@ -156,10 +157,14 @@ export default function CreatePostPage() {
               user.email?.split('@')[0] ||
               'User',
             avatar_url: user.user_metadata?.avatar_url || null,
+          }, {
+            onConflict: 'id',
+            ignoreDuplicates: true,
           }),
         12000,
         'Preparing your profile timed out'
       )
+      if (profileError) throw profileError
 
       let urls = []
       if (optionType === 'images') {
