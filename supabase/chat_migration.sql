@@ -19,11 +19,16 @@ CREATE TABLE IF NOT EXISTS messages (
   conversation_id uuid REFERENCES conversations(id) ON DELETE CASCADE NOT NULL,
   sender_id       uuid REFERENCES auth.users NOT NULL,
   content         text,                          -- null when sharing a post
-  post_id         uuid REFERENCES posts(id),     -- null for text messages
+  post_id         uuid REFERENCES posts(id) ON DELETE CASCADE, -- null for text messages
   read            boolean DEFAULT false,
   created_at      timestamptz DEFAULT now(),
   CHECK (content IS NOT NULL OR post_id IS NOT NULL)
 );
+
+ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_post_id_fkey;
+ALTER TABLE messages
+  ADD CONSTRAINT messages_post_id_fkey
+  FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE CASCADE;
 
 -- 3. Row Level Security
 ALTER TABLE conversations ENABLE ROW LEVEL SECURITY;
@@ -38,9 +43,7 @@ CREATE POLICY "Authenticated users can create conversations"
   ON conversations FOR INSERT
   WITH CHECK (auth.uid() = user1_id);
 
-CREATE POLICY "Members can update (updated_at)"
-  ON conversations FOR UPDATE
-  USING (auth.uid() = user1_id OR auth.uid() = user2_id);
+DROP POLICY IF EXISTS "Members can update (updated_at)" ON conversations;
 
 -- Messages: only conversation members
 CREATE POLICY "Members can view messages"

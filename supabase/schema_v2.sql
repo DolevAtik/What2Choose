@@ -47,9 +47,10 @@ drop policy if exists "Users can read own notifications" on public.notifications
 create policy "Users can read own notifications" on public.notifications
   for select using (auth.uid() = recipient_id);
 
+-- Notifications are inserted by SECURITY DEFINER trigger functions below.
+-- Do not expose a client INSERT policy, or any authenticated client can spoof
+-- arbitrary notifications for other users.
 drop policy if exists "System can insert notifications" on public.notifications;
-create policy "System can insert notifications" on public.notifications
-  for insert with check (true);
 
 drop policy if exists "Users can update own notifications" on public.notifications;
 create policy "Users can update own notifications" on public.notifications
