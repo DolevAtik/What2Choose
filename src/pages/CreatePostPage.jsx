@@ -156,7 +156,7 @@ export default function CreatePostPage() {
               user.email?.split('@')[0] ||
               'User',
             avatar_url: user.user_metadata?.avatar_url || null,
-          }),
+          }, { onConflict: 'id', ignoreDuplicates: true }),
         12000,
         'Preparing your profile timed out'
       )
