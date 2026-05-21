@@ -11,6 +11,10 @@ import { toast } from '../lib/toast'
 
 const OPTION_LETTERS = ['A', 'B', 'C', 'D']
 
+function orderedUserPair(userId, otherUserId) {
+  return [userId, otherUserId].sort()
+}
+
 export default function DecisionCard({ post }) {
   const { user } = useAuth()
   const { t } = useLanguage()
@@ -42,7 +46,7 @@ export default function DecisionCard({ post }) {
   const [showVoters, setShowVoters] = useState(false)
   const [votersLoading, setVotersLoading] = useState(false)
   const [votersError, setVotersError] = useState('')
-  const [voters, setVoters] = useState([]) // { choice, user_id, profiles: { username, avatar_url, email } }
+  const [voters, setVoters] = useState([]) // { choice, user_id, profiles: { username, avatar_url } }
   const shareMenuRef = useRef(null)
 
   const hasLoaded = useRef(false)
@@ -65,13 +69,24 @@ export default function DecisionCard({ post }) {
 
   async function loadData() {
     // Votes
-    const { data: votesData } = await supabase
-      .from('votes').select('choice').eq('post_id', post.id)
+    const counts = { A: 0, B: 0, C: 0, D: 0 }
+    const { data: voteCounts, error: voteCountsError } = await supabase
+      .rpc('get_post_vote_counts', { target_post_id: post.id })
 
-    if (votesData) {
-      const counts = { A: 0, B: 0, C: 0, D: 0 }
-      votesData.forEach(v => counts[v.choice] = (counts[v.choice] || 0) + 1)
+    if (!voteCountsError && voteCounts) {
+      voteCounts.forEach(v => {
+        counts[v.choice] = Number(v.vote_count) || 0
+      })
       setVotes(counts)
+    } else {
+      // Fallback for databases that have not run the latest voting RPC migration yet.
+      const { data: votesData } = await supabase
+        .from('votes').select('choice').eq('post_id', post.id)
+
+      if (votesData) {
+        votesData.forEach(v => counts[v.choice] = (counts[v.choice] || 0) + 1)
+        setVotes(counts)
+      }
     }
 
     if (user) {
@@ -152,7 +167,7 @@ export default function DecisionCard({ post }) {
     try {
       const { data, error } = await supabase
         .from('votes')
-        .select('choice, user_id, profiles(username, avatar_url, email)')
+        .select('choice, user_id, profiles(username, avatar_url)')
         .eq('post_id', post.id)
         .order('created_at', { ascending: false })
 
@@ -237,9 +252,10 @@ export default function DecisionCard({ post }) {
 
       let convId = existing?.id
       if (!convId) {
+        const [user1Id, user2Id] = orderedUserPair(user.id, targetUserId)
         const { data: newConv, error: newConvError } = await supabase
           .from('conversations')
-          .insert({ user1_id: user.id, user2_id: targetUserId })
+          .insert({ user1_id: user1Id, user2_id: user2Id })
           .select('id')
           .single()
         
@@ -269,7 +285,8 @@ export default function DecisionCard({ post }) {
     if (!window.confirm(t('confirmDeletePost'))) return
     setIsDeleting(true)
     try {
-      await supabase.from('posts').delete().eq('id', post.id)
+      const { error } = await supabase.from('posts').delete().eq('id', post.id)
+      if (error) throw error
       setIsDeleted(true)
     } catch (err) {
       console.error('Error deleting post:', err)
@@ -278,7 +295,7 @@ export default function DecisionCard({ post }) {
     }
   }
 
-  const authorName = post.profiles?.username || post.profiles?.email?.split('@')[0] || 'User'
+  const authorName = post.profiles?.username || 'User'
   const avatarUrl = post.profiles?.avatar_url
 
   // Layout grid class
@@ -692,7 +709,7 @@ export default function DecisionCard({ post }) {
                           </div>
                           <div className="p-3 space-y-2">
                             {group.map((v) => {
-                              const name = v.profiles?.username || v.profiles?.email?.split('@')[0] || 'User'
+                              const name = v.profiles?.username || 'User'
                               const avatar = v.profiles?.avatar_url
                               return (
                                 <div key={`${v.user_id}-${opt.letter}`} className="flex items-center gap-3 p-2 rounded-xl hover:bg-white/5 transition-colors">
