@@ -147,16 +147,20 @@ export default function CreatePostPage() {
       await withTimeout(
         supabase
           .from('profiles')
-          .upsert({
-            id: user.id,
-            email: user.email,
-            username:
-              user.user_metadata?.full_name ||
-              user.user_metadata?.name ||
-              user.email?.split('@')[0] ||
-              'User',
-            avatar_url: user.user_metadata?.avatar_url || null,
-          }),
+          .upsert(
+            {
+              id: user.id,
+              email: user.email,
+              username:
+                user.user_metadata?.username ||
+                user.user_metadata?.full_name ||
+                user.user_metadata?.name ||
+                user.email?.split('@')[0] ||
+                'User',
+              avatar_url: user.user_metadata?.avatar_url || null,
+            },
+            { onConflict: 'id', ignoreDuplicates: true }
+          ),
         12000,
         'Preparing your profile timed out'
       )

@@ -8,6 +8,10 @@ import { useAuth } from '../hooks/useAuth'
 import { toast } from '../lib/toast'
 import { useLanguage } from '../contexts/LanguageContext'
 
+function orderedUserPair(userId, otherUserId) {
+  return [userId, otherUserId].sort()
+}
+
 export default function ChatPage() {
   const { userId: targetUserId } = useParams()
   const { user } = useAuth()
@@ -213,23 +217,24 @@ export default function ChatPage() {
       if (existing) {
         const otherId = existing.user1_id === user.id ? existing.user2_id : existing.user1_id
         const { data: otherProfile } = await withTimeout(
-          supabase.from('profiles').select('*').eq('id', otherId).single(),
+          supabase.from('profiles').select('id, username, avatar_url').eq('id', otherId).single(),
           12000,
           'Loading profile timed out'
         )
         setSelectedConv({ ...existing, otherUser: otherProfile })
       } else {
+        const [user1Id, user2Id] = orderedUserPair(user.id, otherUserId)
         const { data: newConv } = await withTimeout(
           supabase
             .from('conversations')
-            .insert({ user1_id: user.id, user2_id: otherUserId })
+            .insert({ user1_id: user1Id, user2_id: user2Id })
             .select()
             .single(),
           12000,
           'Creating conversation timed out'
         )
         const { data: otherProfile } = await withTimeout(
-          supabase.from('profiles').select('*').eq('id', otherUserId).single(),
+          supabase.from('profiles').select('id, username, avatar_url').eq('id', otherUserId).single(),
           12000,
           'Loading profile timed out'
         )

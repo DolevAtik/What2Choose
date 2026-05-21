@@ -63,7 +63,7 @@ export function AuthProvider({ children }) {
     const { data: existingProfile } = await withTimeout(
       supabase
         .from('profiles')
-        .select('*')
+        .select('id, username, avatar_url, created_at')
         .eq('id', currentUser.id)
         .single(),
       12000,
@@ -77,6 +77,7 @@ export function AuthProvider({ children }) {
 
     // New user (social login, etc.) – create profile
     const username =
+      currentUser.user_metadata?.username ||
       currentUser.user_metadata?.full_name ||
       currentUser.user_metadata?.name ||
       currentUser.email?.split('@')[0]
@@ -84,27 +85,34 @@ export function AuthProvider({ children }) {
     const { data: newProfile, error: createError } = await withTimeout(
       supabase
         .from('profiles')
-        .upsert({
-          id: currentUser.id,
-          username: username || 'User',
-          avatar_url: currentUser.user_metadata?.avatar_url || null,
-          email: currentUser.email,
-        })
-        .select()
-        .single(),
+        .upsert(
+          {
+            id: currentUser.id,
+            username: username || 'User',
+            avatar_url: currentUser.user_metadata?.avatar_url || null,
+            email: currentUser.email,
+          },
+          { onConflict: 'id', ignoreDuplicates: true }
+        )
+        .select('id, username, avatar_url, created_at')
+        .maybeSingle(),
       12000,
       'Creating profile timed out'
     )
 
     if (createError) console.error('Failed to create initial profile:', createError)
-    setProfile(newProfile)
-    return newProfile
+    if (newProfile) {
+      setProfile(newProfile)
+      return newProfile
+    }
+
+    return fetchProfile(currentUser.id)
   }
 
   async function fetchProfile(userId) {
     const { data, error } = await supabase
       .from('profiles')
-      .select('*')
+      .select('id, username, avatar_url, created_at')
       .eq('id', userId)
       .single()
 
@@ -162,7 +170,7 @@ export function AuthProvider({ children }) {
     const { data, error } = await supabase
       .from('profiles')
       .upsert({ id: user.id, ...updates })
-      .select()
+      .select('id, username, avatar_url, created_at')
       .single()
     if (error) throw error
     setProfile(data)
