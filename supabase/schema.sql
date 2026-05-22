@@ -152,7 +152,7 @@ drop policy if exists "Auth users can upload post-images" on storage.objects;
 create policy "Auth users can upload post-images" on storage.objects
   for insert with check (
     bucket_id = 'post-images' and
-    auth.uid() is not null
+    auth.uid()::text = (storage.foldername(name))[1]
   );
 
 drop policy if exists "Users can delete own post-images" on storage.objects;

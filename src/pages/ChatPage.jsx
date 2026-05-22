@@ -200,15 +200,18 @@ export default function ChatPage() {
 
   async function openOrCreateConversation(otherUserId) {
     try {
-      const { data: existing } = await withTimeout(
+      const { data: existing, error: existingError } = await withTimeout(
         supabase
           .from('conversations')
           .select('*')
           .or(`and(user1_id.eq.${user.id},user2_id.eq.${otherUserId}),and(user1_id.eq.${otherUserId},user2_id.eq.${user.id})`)
+          .order('created_at', { ascending: true })
+          .limit(1)
           .maybeSingle(),
         12000,
         'Opening conversation timed out'
       )
+      if (existingError) throw existingError
 
       if (existing) {
         const otherId = existing.user1_id === user.id ? existing.user2_id : existing.user1_id
@@ -219,7 +222,7 @@ export default function ChatPage() {
         )
         setSelectedConv({ ...existing, otherUser: otherProfile })
       } else {
-        const { data: newConv } = await withTimeout(
+        const { data: newConv, error: newConvError } = await withTimeout(
           supabase
             .from('conversations')
             .insert({ user1_id: user.id, user2_id: otherUserId })
@@ -228,13 +231,32 @@ export default function ChatPage() {
           12000,
           'Creating conversation timed out'
         )
+        let convToSelect = newConv
+        if (newConvError) {
+          if (newConvError.code !== '23505') throw newConvError
+
+          const { data: racedConv, error: racedError } = await withTimeout(
+            supabase
+              .from('conversations')
+              .select('*')
+              .or(`and(user1_id.eq.${user.id},user2_id.eq.${otherUserId}),and(user1_id.eq.${otherUserId},user2_id.eq.${user.id})`)
+              .order('created_at', { ascending: true })
+              .limit(1)
+              .maybeSingle(),
+            12000,
+            'Opening conversation timed out'
+          )
+          if (racedError) throw racedError
+          convToSelect = racedConv
+        }
+
         const { data: otherProfile } = await withTimeout(
           supabase.from('profiles').select('*').eq('id', otherUserId).single(),
           12000,
           'Loading profile timed out'
         )
-        if (newConv) {
-          const conv = { ...newConv, otherUser: otherProfile, messages: [] }
+        if (convToSelect) {
+          const conv = { ...convToSelect, otherUser: otherProfile, messages: [] }
           setConversations(prev => [conv, ...prev])
           setSelectedConv(conv)
         }

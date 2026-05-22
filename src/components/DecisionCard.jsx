@@ -231,6 +231,8 @@ export default function DecisionCard({ post }) {
         .from('conversations')
         .select('id')
         .or(`and(user1_id.eq.${user.id},user2_id.eq.${targetUserId}),and(user1_id.eq.${targetUserId},user2_id.eq.${user.id})`)
+        .order('created_at', { ascending: true })
+        .limit(1)
         .maybeSingle()
 
       if (existError) throw existError
@@ -243,14 +245,27 @@ export default function DecisionCard({ post }) {
           .select('id')
           .single()
         
-        if (newConvError) throw newConvError
-        convId = newConv?.id
+        if (newConvError) {
+          if (newConvError.code !== '23505') throw newConvError
+
+          const { data: racedConv, error: racedError } = await supabase
+            .from('conversations')
+            .select('id')
+            .or(`and(user1_id.eq.${user.id},user2_id.eq.${targetUserId}),and(user1_id.eq.${targetUserId},user2_id.eq.${user.id})`)
+            .order('created_at', { ascending: true })
+            .limit(1)
+            .maybeSingle()
+          if (racedError) throw racedError
+          convId = racedConv?.id
+        } else {
+          convId = newConv?.id
+        }
       }
 
-      if (convId) {
-        const { error: msgError } = await supabase.from('messages').insert({ conversation_id: convId, sender_id: user.id, post_id: post.id })
-        if (msgError) throw msgError
-      }
+      if (!convId) throw new Error('Could not open conversation')
+
+      const { error: msgError } = await supabase.from('messages').insert({ conversation_id: convId, sender_id: user.id, post_id: post.id })
+      if (msgError) throw msgError
       
       toast.success(t('sentToChat'))
     } catch (err) {
@@ -269,11 +284,13 @@ export default function DecisionCard({ post }) {
     if (!window.confirm(t('confirmDeletePost'))) return
     setIsDeleting(true)
     try {
-      await supabase.from('posts').delete().eq('id', post.id)
+      const { error } = await supabase.from('posts').delete().eq('id', post.id)
+      if (error) throw error
       setIsDeleted(true)
     } catch (err) {
       console.error('Error deleting post:', err)
       toast.error(t('failedToDeletePost'))
+    } finally {
       setIsDeleting(false)
     }
   }
