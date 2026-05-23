@@ -8,6 +8,15 @@ import { useAuth } from '../hooks/useAuth'
 import { toast } from '../lib/toast'
 import { useLanguage } from '../contexts/LanguageContext'
 
+function orderedConversationPair(userId, otherUserId) {
+  return [userId, otherUserId].sort()
+}
+
+function appendMessageOnce(messages, message) {
+  if (!message?.id || messages.some((item) => item.id === message.id)) return messages
+  return [...messages, message]
+}
+
 export default function ChatPage() {
   const { userId: targetUserId } = useParams()
   const { user } = useAuth()
@@ -26,6 +35,12 @@ export default function ChatPage() {
   const [searching, setSearching] = useState(false)
   const messagesEndRef = useRef(null)
   const inputRef = useRef(null)
+  const selectedConvIdRef = useRef(null)
+  const messagesRequestRef = useRef(0)
+
+  useEffect(() => {
+    selectedConvIdRef.current = selectedConv?.id || null
+  }, [selectedConv?.id])
 
   // Load conversations on mount
   useEffect(() => {
@@ -61,9 +76,9 @@ export default function ChatPage() {
               .select('*, post:posts(id, question, option_a_url, author:profiles!author_id(username))')
               .eq('id', payload.new.id)
               .single()
-            setMessages(prev => [...prev, data || payload.new])
+            setMessages(prev => appendMessageOnce(prev, data || payload.new))
           } else {
-            setMessages(prev => [...prev, payload.new])
+            setMessages(prev => appendMessageOnce(prev, payload.new))
           }
         })
         .subscribe()
@@ -175,6 +190,7 @@ export default function ChatPage() {
   }
 
   async function loadMessages(convId) {
+    const requestId = ++messagesRequestRef.current
     try {
       const { data, error } = await withTimeout(
         supabase
@@ -190,11 +206,12 @@ export default function ChatPage() {
         console.error('Error loading messages:', error)
         throw error
       }
+      if (requestId !== messagesRequestRef.current || selectedConvIdRef.current !== convId) return
       setMessages(data || [])
     } catch (e) {
       console.error('loadMessages exception:', e)
     } finally {
-      setLoadingMsgs(false)
+      if (requestId === messagesRequestRef.current) setLoadingMsgs(false)
     }
   }
 
@@ -219,10 +236,11 @@ export default function ChatPage() {
         )
         setSelectedConv({ ...existing, otherUser: otherProfile })
       } else {
+        const [user1Id, user2Id] = orderedConversationPair(user.id, otherUserId)
         const { data: newConv } = await withTimeout(
           supabase
             .from('conversations')
-            .insert({ user1_id: user.id, user2_id: otherUserId })
+            .insert({ user1_id: user1Id, user2_id: user2Id })
             .select()
             .single(),
           12000,

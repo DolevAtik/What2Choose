@@ -143,23 +143,38 @@ export default function CreatePostPage() {
         setProgressMsg(`${t('loading')} ${pct}%`)
       }
       
-      // Ensure profile exists before inserting posts (FK: posts.author_id -> profiles.id)
-      await withTimeout(
+      // Ensure profile exists before inserting posts without overwriting user edits.
+      const { data: existingProfile, error: profileLookupError } = await withTimeout(
         supabase
           .from('profiles')
-          .upsert({
-            id: user.id,
-            email: user.email,
-            username:
-              user.user_metadata?.full_name ||
-              user.user_metadata?.name ||
-              user.email?.split('@')[0] ||
-              'User',
-            avatar_url: user.user_metadata?.avatar_url || null,
-          }),
+          .select('id')
+          .eq('id', user.id)
+          .maybeSingle(),
         12000,
         'Preparing your profile timed out'
       )
+      if (profileLookupError) throw profileLookupError
+
+      if (!existingProfile) {
+        const { error: profileInsertError } = await withTimeout(
+          supabase
+            .from('profiles')
+            .insert({
+              id: user.id,
+              email: user.email,
+              username:
+                user.user_metadata?.username ||
+                user.user_metadata?.full_name ||
+                user.user_metadata?.name ||
+                user.email?.split('@')[0] ||
+                'User',
+              avatar_url: user.user_metadata?.avatar_url || null,
+            }),
+          12000,
+          'Preparing your profile timed out'
+        )
+        if (profileInsertError && profileInsertError.code !== '23505') throw profileInsertError
+      }
 
       let urls = []
       if (optionType === 'images') {
