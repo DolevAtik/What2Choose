@@ -11,6 +11,10 @@ import { toast } from '../lib/toast'
 
 const OPTION_LETTERS = ['A', 'B', 'C', 'D']
 
+function orderedConversationPair(userId, otherUserId) {
+  return [userId, otherUserId].sort()
+}
+
 export default function DecisionCard({ post }) {
   const { user } = useAuth()
   const { t } = useLanguage()
@@ -237,9 +241,10 @@ export default function DecisionCard({ post }) {
 
       let convId = existing?.id
       if (!convId) {
+        const [user1Id, user2Id] = orderedConversationPair(user.id, targetUserId)
         const { data: newConv, error: newConvError } = await supabase
           .from('conversations')
-          .insert({ user1_id: user.id, user2_id: targetUserId })
+          .insert({ user1_id: user1Id, user2_id: user2Id })
           .select('id')
           .single()
         
@@ -269,11 +274,13 @@ export default function DecisionCard({ post }) {
     if (!window.confirm(t('confirmDeletePost'))) return
     setIsDeleting(true)
     try {
-      await supabase.from('posts').delete().eq('id', post.id)
+      const { error } = await supabase.from('posts').delete().eq('id', post.id)
+      if (error) throw error
       setIsDeleted(true)
     } catch (err) {
       console.error('Error deleting post:', err)
       toast.error(t('failedToDeletePost'))
+    } finally {
       setIsDeleting(false)
     }
   }
