@@ -7,6 +7,7 @@ import { withTimeout } from '../lib/withTimeout'
 import { useAuth } from '../hooks/useAuth'
 import { toast } from '../lib/toast'
 import { useLanguage } from '../contexts/LanguageContext'
+import { getOrCreateConversation } from '../lib/chat'
 
 export default function ChatPage() {
   const { userId: targetUserId } = useParams()
@@ -200,44 +201,24 @@ export default function ChatPage() {
 
   async function openOrCreateConversation(otherUserId) {
     try {
-      const { data: existing } = await withTimeout(
-        supabase
-          .from('conversations')
-          .select('*')
-          .or(`and(user1_id.eq.${user.id},user2_id.eq.${otherUserId}),and(user1_id.eq.${otherUserId},user2_id.eq.${user.id})`)
-          .maybeSingle(),
+      const { data: conversation, error: conversationError } = await withTimeout(
+        getOrCreateConversation(supabase, user.id, otherUserId),
         12000,
         'Opening conversation timed out'
       )
 
-      if (existing) {
-        const otherId = existing.user1_id === user.id ? existing.user2_id : existing.user1_id
+      if (conversationError) throw conversationError
+
+      if (conversation) {
+        const otherId = conversation.user1_id === user.id ? conversation.user2_id : conversation.user1_id
         const { data: otherProfile } = await withTimeout(
           supabase.from('profiles').select('*').eq('id', otherId).single(),
           12000,
           'Loading profile timed out'
         )
-        setSelectedConv({ ...existing, otherUser: otherProfile })
-      } else {
-        const { data: newConv } = await withTimeout(
-          supabase
-            .from('conversations')
-            .insert({ user1_id: user.id, user2_id: otherUserId })
-            .select()
-            .single(),
-          12000,
-          'Creating conversation timed out'
-        )
-        const { data: otherProfile } = await withTimeout(
-          supabase.from('profiles').select('*').eq('id', otherUserId).single(),
-          12000,
-          'Loading profile timed out'
-        )
-        if (newConv) {
-          const conv = { ...newConv, otherUser: otherProfile, messages: [] }
-          setConversations(prev => [conv, ...prev])
-          setSelectedConv(conv)
-        }
+        const conv = { ...conversation, otherUser: otherProfile, messages: conversation.messages || [] }
+        setConversations(prev => prev.some(c => c.id === conv.id) ? prev : [conv, ...prev])
+        setSelectedConv(conv)
       }
       await loadConversations()
     } catch (e) {

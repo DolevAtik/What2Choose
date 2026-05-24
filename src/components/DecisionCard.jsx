@@ -8,6 +8,7 @@ import { useAuth } from '../hooks/useAuth'
 import { useLanguage } from '../contexts/LanguageContext'
 import CommentSection from './CommentSection'
 import { toast } from '../lib/toast'
+import { getOrCreateConversation } from '../lib/chat'
 
 const OPTION_LETTERS = ['A', 'B', 'C', 'D']
 
@@ -226,29 +227,12 @@ export default function DecisionCard({ post }) {
     if (!user || chatSending) return
     setChatSending(true)
     try {
-      // Get or create conversation
-      const { data: existing, error: existError } = await supabase
-        .from('conversations')
-        .select('id')
-        .or(`and(user1_id.eq.${user.id},user2_id.eq.${targetUserId}),and(user1_id.eq.${targetUserId},user2_id.eq.${user.id})`)
-        .maybeSingle()
+      const { data: conversation, error: conversationError } =
+        await getOrCreateConversation(supabase, user.id, targetUserId, 'id')
+      if (conversationError) throw conversationError
 
-      if (existError) throw existError
-
-      let convId = existing?.id
-      if (!convId) {
-        const { data: newConv, error: newConvError } = await supabase
-          .from('conversations')
-          .insert({ user1_id: user.id, user2_id: targetUserId })
-          .select('id')
-          .single()
-        
-        if (newConvError) throw newConvError
-        convId = newConv?.id
-      }
-
-      if (convId) {
-        const { error: msgError } = await supabase.from('messages').insert({ conversation_id: convId, sender_id: user.id, post_id: post.id })
+      if (conversation?.id) {
+        const { error: msgError } = await supabase.from('messages').insert({ conversation_id: conversation.id, sender_id: user.id, post_id: post.id })
         if (msgError) throw msgError
       }
       
@@ -269,11 +253,13 @@ export default function DecisionCard({ post }) {
     if (!window.confirm(t('confirmDeletePost'))) return
     setIsDeleting(true)
     try {
-      await supabase.from('posts').delete().eq('id', post.id)
+      const { error } = await supabase.from('posts').delete().eq('id', post.id)
+      if (error) throw error
       setIsDeleted(true)
     } catch (err) {
       console.error('Error deleting post:', err)
       toast.error(t('failedToDeletePost'))
+    } finally {
       setIsDeleting(false)
     }
   }
