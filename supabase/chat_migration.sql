@@ -16,7 +16,7 @@ ALTER TABLE conversations
   DROP CONSTRAINT IF EXISTS conversations_distinct_users_check;
 
 ALTER TABLE conversations
-  ADD CONSTRAINT conversations_distinct_users_check CHECK (user1_id <> user2_id);
+  ADD CONSTRAINT conversations_distinct_users_check CHECK (user1_id <> user2_id) NOT VALID;
 
 -- 2. Messages table
 CREATE TABLE IF NOT EXISTS messages (
@@ -127,8 +127,19 @@ CREATE POLICY "Members can insert messages"
   );
 
 -- 4. Realtime (enable for both tables)
-ALTER PUBLICATION supabase_realtime ADD TABLE conversations;
-ALTER PUBLICATION supabase_realtime ADD TABLE messages;
+DO $$
+BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE conversations;
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$
+BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE messages;
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
 
 -- 5. Index for performance
 CREATE INDEX IF NOT EXISTS idx_messages_conversation_id ON messages(conversation_id);
