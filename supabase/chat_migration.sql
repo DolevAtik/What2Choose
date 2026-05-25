@@ -9,8 +9,7 @@ CREATE TABLE IF NOT EXISTS conversations (
   user1_id    uuid REFERENCES auth.users NOT NULL,
   user2_id    uuid REFERENCES auth.users NOT NULL,
   created_at  timestamptz DEFAULT now(),
-  updated_at  timestamptz DEFAULT now(),
-  UNIQUE (user1_id, user2_id)
+  updated_at  timestamptz DEFAULT now()
 );
 
 -- 2. Messages table
@@ -19,7 +18,7 @@ CREATE TABLE IF NOT EXISTS messages (
   conversation_id uuid REFERENCES conversations(id) ON DELETE CASCADE NOT NULL,
   sender_id       uuid REFERENCES auth.users NOT NULL,
   content         text,                          -- null when sharing a post
-  post_id         uuid REFERENCES posts(id),     -- null for text messages
+  post_id         uuid REFERENCES posts(id) ON DELETE CASCADE, -- null for text messages
   read            boolean DEFAULT false,
   created_at      timestamptz DEFAULT now(),
   CHECK (content IS NOT NULL OR post_id IS NOT NULL)
