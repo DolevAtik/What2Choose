@@ -41,6 +41,8 @@ export function AuthProvider({ children }) {
           await ensureProfile(currentUser).catch(err => {
             console.error('Initial profile fetch failed:', err)
           })
+        } else {
+          setProfile(null)
         }
 
         // Clear loading state on first significant event
@@ -63,7 +65,7 @@ export function AuthProvider({ children }) {
     const { data: existingProfile } = await withTimeout(
       supabase
         .from('profiles')
-        .select('*')
+        .select('id, username, avatar_url, created_at')
         .eq('id', currentUser.id)
         .single(),
       12000,
@@ -89,14 +91,18 @@ export function AuthProvider({ children }) {
           username: username || 'User',
           avatar_url: currentUser.user_metadata?.avatar_url || null,
           email: currentUser.email,
-        })
+        }, { onConflict: 'id', ignoreDuplicates: true })
         .select()
         .single(),
       12000,
       'Creating profile timed out'
     )
 
-    if (createError) console.error('Failed to create initial profile:', createError)
+    if (createError) {
+      console.error('Failed to create initial profile:', createError)
+      return fetchProfile(currentUser.id)
+    }
+    if (!newProfile) return fetchProfile(currentUser.id)
     setProfile(newProfile)
     return newProfile
   }
@@ -104,7 +110,7 @@ export function AuthProvider({ children }) {
   async function fetchProfile(userId) {
     const { data, error } = await supabase
       .from('profiles')
-      .select('*')
+      .select('id, username, avatar_url, created_at')
       .eq('id', userId)
       .single()
 
@@ -162,7 +168,7 @@ export function AuthProvider({ children }) {
     const { data, error } = await supabase
       .from('profiles')
       .upsert({ id: user.id, ...updates })
-      .select()
+      .select('id, username, avatar_url, created_at')
       .single()
     if (error) throw error
     setProfile(data)

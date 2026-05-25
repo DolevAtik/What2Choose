@@ -7,6 +7,7 @@ import { withTimeout } from '../lib/withTimeout'
 import { useAuth } from '../hooks/useAuth'
 import { toast } from '../lib/toast'
 import { useLanguage } from '../contexts/LanguageContext'
+import { getOrCreateConversation } from '../lib/chat'
 
 export default function ChatPage() {
   const { userId: targetUserId } = useParams()
@@ -26,6 +27,11 @@ export default function ChatPage() {
   const [searching, setSearching] = useState(false)
   const messagesEndRef = useRef(null)
   const inputRef = useRef(null)
+  const selectedConvIdRef = useRef(null)
+
+  useEffect(() => {
+    selectedConvIdRef.current = selectedConv?.id || null
+  }, [selectedConv?.id])
 
   // Load conversations on mount
   useEffect(() => {
@@ -55,15 +61,17 @@ export default function ChatPage() {
           table: 'messages',
           filter: `conversation_id=eq.${selectedConv.id}`,
         }, async (payload) => {
+          if (selectedConvIdRef.current !== selectedConv.id) return
           if (payload.new.post_id) {
             const { data } = await supabase
               .from('messages')
               .select('*, post:posts(id, question, option_a_url, author:profiles!author_id(username))')
               .eq('id', payload.new.id)
               .single()
-            setMessages(prev => [...prev, data || payload.new])
+            const message = data || payload.new
+            setMessages(prev => prev.some(m => m.id === message.id) ? prev : [...prev, message])
           } else {
-            setMessages(prev => [...prev, payload.new])
+            setMessages(prev => prev.some(m => m.id === payload.new.id) ? prev : [...prev, payload.new])
           }
         })
         .subscribe()
@@ -190,54 +198,36 @@ export default function ChatPage() {
         console.error('Error loading messages:', error)
         throw error
       }
-      setMessages(data || [])
+      if (selectedConvIdRef.current === convId) {
+        setMessages(data || [])
+      }
     } catch (e) {
       console.error('loadMessages exception:', e)
     } finally {
-      setLoadingMsgs(false)
+      if (selectedConvIdRef.current === convId) {
+        setLoadingMsgs(false)
+      }
     }
   }
 
   async function openOrCreateConversation(otherUserId) {
     try {
-      const { data: existing } = await withTimeout(
-        supabase
-          .from('conversations')
-          .select('*')
-          .or(`and(user1_id.eq.${user.id},user2_id.eq.${otherUserId}),and(user1_id.eq.${otherUserId},user2_id.eq.${user.id})`)
-          .maybeSingle(),
+      const conversation = await withTimeout(
+        getOrCreateConversation(user.id, otherUserId),
         12000,
         'Opening conversation timed out'
       )
 
-      if (existing) {
-        const otherId = existing.user1_id === user.id ? existing.user2_id : existing.user1_id
-        const { data: otherProfile } = await withTimeout(
-          supabase.from('profiles').select('*').eq('id', otherId).single(),
-          12000,
-          'Loading profile timed out'
-        )
-        setSelectedConv({ ...existing, otherUser: otherProfile })
-      } else {
-        const { data: newConv } = await withTimeout(
-          supabase
-            .from('conversations')
-            .insert({ user1_id: user.id, user2_id: otherUserId })
-            .select()
-            .single(),
-          12000,
-          'Creating conversation timed out'
-        )
-        const { data: otherProfile } = await withTimeout(
-          supabase.from('profiles').select('*').eq('id', otherUserId).single(),
-          12000,
-          'Loading profile timed out'
-        )
-        if (newConv) {
-          const conv = { ...newConv, otherUser: otherProfile, messages: [] }
-          setConversations(prev => [conv, ...prev])
-          setSelectedConv(conv)
-        }
+      const otherId = conversation.user1_id === user.id ? conversation.user2_id : conversation.user1_id
+      const { data: otherProfile } = await withTimeout(
+        supabase.from('profiles').select('id, username, avatar_url').eq('id', otherId).single(),
+        12000,
+        'Loading profile timed out'
+      )
+      const conv = { ...conversation, otherUser: otherProfile, messages: [] }
+      setSelectedConv(conv)
+      if (!conversations.some(c => c.id === conv.id)) {
+        setConversations(prev => [conv, ...prev])
       }
       await loadConversations()
     } catch (e) {
@@ -250,12 +240,12 @@ export default function ChatPage() {
     if (!newMsg.trim() || !selectedConv || sending) return
     setSending(true)
     const content = newMsg.trim()
-    setNewMsg('')
+    const convId = selectedConv.id
 
     try {
       const { error } = await withTimeout(
         supabase.from('messages').insert({
-          conversation_id: selectedConv.id,
+          conversation_id: convId,
           sender_id: user.id,
           content,
         }),
@@ -265,8 +255,11 @@ export default function ChatPage() {
 
       if (error) throw error
 
+      setNewMsg('')
       // Fetch the updated messages list immediately as a fallback if Realtime is delayed
-      loadMessages(selectedConv.id)
+      if (selectedConvIdRef.current === convId) {
+        loadMessages(convId)
+      }
     } catch (err) {
       console.error('Send message error:', err)
       toast.error(err?.message ? `Error sending message: ${err.message}` : 'Error sending message')
