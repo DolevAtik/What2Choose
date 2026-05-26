@@ -96,7 +96,7 @@ export default function CreatePostPage() {
       const { error } = await Promise.race([upload, timeout])
       if (error) throw error
       const { data: { publicUrl } } = supabase.storage.from(bucketId).getPublicUrl(path)
-      return publicUrl
+      return { publicUrl, bucketId, path }
     }
 
     try {
@@ -129,6 +129,7 @@ export default function CreatePostPage() {
     setLoading(true)
     setProgressPct(0)
     setProgressMsg(`${t('loading')} 0%`)
+    const uploadedObjects = []
 
     try {
       const ts = Date.now()
@@ -144,7 +145,7 @@ export default function CreatePostPage() {
       }
       
       // Ensure profile exists before inserting posts (FK: posts.author_id -> profiles.id)
-      await withTimeout(
+      const { error: profileError } = await withTimeout(
         supabase
           .from('profiles')
           .upsert({
@@ -156,10 +157,11 @@ export default function CreatePostPage() {
               user.email?.split('@')[0] ||
               'User',
             avatar_url: user.user_metadata?.avatar_url || null,
-          }),
+          }, { onConflict: 'id', ignoreDuplicates: true }),
         12000,
         'Preparing your profile timed out'
       )
+      if (profileError) throw profileError
 
       let urls = []
       if (optionType === 'images') {
@@ -173,9 +175,10 @@ export default function CreatePostPage() {
             (globalThis.crypto?.randomUUID?.() || `${Math.random().toString(16).slice(2)}${Math.random().toString(16).slice(2)}`)
           const path = `${user.id}/${ts}_${unique}_${OPTION_LETTERS[i].toLowerCase()}.jpg`
           return uploadToStorage(blob, path)
-            .then((url) => {
+            .then((result) => {
+              uploadedObjects.push({ bucketId: result.bucketId, path: result.path })
               bumpProgress()
-              return url
+              return result.publicUrl
             })
         })
         urls = await Promise.all(uploadPromises)
@@ -210,6 +213,18 @@ export default function CreatePostPage() {
       navigate('/')
     } catch (err) {
       console.error(err)
+      if (uploadedObjects.length > 0) {
+        const byBucket = uploadedObjects.reduce((groups, object) => {
+          groups[object.bucketId] = groups[object.bucketId] || []
+          groups[object.bucketId].push(object.path)
+          return groups
+        }, {})
+        await Promise.all(Object.entries(byBucket).map(([bucketId, paths]) =>
+          supabase.storage.from(bucketId).remove(paths).catch((cleanupErr) => {
+            console.error('Failed to clean up uploaded post images:', cleanupErr)
+          })
+        ))
+      }
       const msg = err?.message || ''
       const details = err?.details || err?.hint || err?.error_description || ''
       if (err.message?.includes('bucket not found')) {
