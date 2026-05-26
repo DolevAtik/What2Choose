@@ -1,4 +1,4 @@
-import { createContext, useEffect, useState } from 'react'
+import { createContext, useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { withTimeout } from '../lib/withTimeout'
 
@@ -9,6 +9,7 @@ export function AuthProvider({ children }) {
   const [profile, setProfile] = useState(null)
   // Start as true – we wait for Supabase to restore session before rendering
   const [loading, setLoading] = useState(true)
+  const latestUserIdRef = useRef(null)
 
   useEffect(() => {
     let mounted = true
@@ -33,6 +34,7 @@ export function AuthProvider({ children }) {
         const isInitial = event === 'INITIAL_SESSION'
         
         console.log('Auth event:', event, currentUser?.id)
+        latestUserIdRef.current = currentUser?.id ?? null
         setUser(currentUser)
 
         if (currentUser) {
@@ -41,6 +43,8 @@ export function AuthProvider({ children }) {
           await ensureProfile(currentUser).catch(err => {
             console.error('Initial profile fetch failed:', err)
           })
+        } else {
+          setProfile(null)
         }
 
         // Clear loading state on first significant event
@@ -63,7 +67,7 @@ export function AuthProvider({ children }) {
     const { data: existingProfile } = await withTimeout(
       supabase
         .from('profiles')
-        .select('*')
+        .select('id, username, avatar_url, created_at')
         .eq('id', currentUser.id)
         .single(),
       12000,
@@ -71,6 +75,7 @@ export function AuthProvider({ children }) {
     )
 
     if (existingProfile) {
+      if (latestUserIdRef.current !== currentUser.id) return null
       setProfile(existingProfile)
       return existingProfile
     }
@@ -81,7 +86,7 @@ export function AuthProvider({ children }) {
       currentUser.user_metadata?.name ||
       currentUser.email?.split('@')[0]
 
-    const { data: newProfile, error: createError } = await withTimeout(
+    const { error: createError } = await withTimeout(
       supabase
         .from('profiles')
         .upsert({
@@ -89,14 +94,22 @@ export function AuthProvider({ children }) {
           username: username || 'User',
           avatar_url: currentUser.user_metadata?.avatar_url || null,
           email: currentUser.email,
-        })
-        .select()
-        .single(),
+        }, { onConflict: 'id', ignoreDuplicates: true }),
       12000,
       'Creating profile timed out'
     )
 
     if (createError) console.error('Failed to create initial profile:', createError)
+    const { data: newProfile } = await withTimeout(
+      supabase
+        .from('profiles')
+        .select('id, username, avatar_url, created_at')
+        .eq('id', currentUser.id)
+        .single(),
+      12000,
+      'Loading profile timed out'
+    )
+    if (latestUserIdRef.current !== currentUser.id) return null
     setProfile(newProfile)
     return newProfile
   }
@@ -104,7 +117,7 @@ export function AuthProvider({ children }) {
   async function fetchProfile(userId) {
     const { data, error } = await supabase
       .from('profiles')
-      .select('*')
+      .select('id, username, avatar_url, created_at')
       .eq('id', userId)
       .single()
 
@@ -162,7 +175,7 @@ export function AuthProvider({ children }) {
     const { data, error } = await supabase
       .from('profiles')
       .upsert({ id: user.id, ...updates })
-      .select()
+      .select('id, username, avatar_url, created_at')
       .single()
     if (error) throw error
     setProfile(data)

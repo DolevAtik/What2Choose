@@ -25,24 +25,73 @@ CREATE TABLE IF NOT EXISTS messages (
   CHECK (content IS NOT NULL OR post_id IS NOT NULL)
 );
 
+ALTER TABLE messages
+  DROP CONSTRAINT IF EXISTS messages_post_id_fkey;
+
+ALTER TABLE messages
+  ADD CONSTRAINT messages_post_id_fkey
+  FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE CASCADE;
+
+-- Existing installs may already have duplicate rows for the same unordered user pair.
+-- Move messages to the oldest row for each pair before enforcing the canonical unique index.
+WITH ranked_conversations AS (
+  SELECT
+    id,
+    FIRST_VALUE(id) OVER (
+      PARTITION BY LEAST(user1_id, user2_id), GREATEST(user1_id, user2_id)
+      ORDER BY created_at ASC, id ASC
+    ) AS keeper_id,
+    ROW_NUMBER() OVER (
+      PARTITION BY LEAST(user1_id, user2_id), GREATEST(user1_id, user2_id)
+      ORDER BY created_at ASC, id ASC
+    ) AS row_num
+  FROM conversations
+)
+UPDATE messages m
+SET conversation_id = r.keeper_id
+FROM ranked_conversations r
+WHERE m.conversation_id = r.id
+  AND r.row_num > 1;
+
+WITH ranked_conversations AS (
+  SELECT
+    id,
+    ROW_NUMBER() OVER (
+      PARTITION BY LEAST(user1_id, user2_id), GREATEST(user1_id, user2_id)
+      ORDER BY created_at ASC, id ASC
+    ) AS row_num
+  FROM conversations
+)
+DELETE FROM conversations c
+USING ranked_conversations r
+WHERE c.id = r.id
+  AND r.row_num > 1;
+
+CREATE UNIQUE INDEX IF NOT EXISTS conversations_unique_unordered_pair
+  ON conversations (LEAST(user1_id, user2_id), GREATEST(user1_id, user2_id));
+
 -- 3. Row Level Security
 ALTER TABLE conversations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE messages      ENABLE ROW LEVEL SECURITY;
 
 -- Conversations: only members can see/create
+DROP POLICY IF EXISTS "Members can view their conversations" ON conversations;
 CREATE POLICY "Members can view their conversations"
   ON conversations FOR SELECT
   USING (auth.uid() = user1_id OR auth.uid() = user2_id);
 
+DROP POLICY IF EXISTS "Authenticated users can create conversations" ON conversations;
 CREATE POLICY "Authenticated users can create conversations"
   ON conversations FOR INSERT
   WITH CHECK (auth.uid() = user1_id);
 
+DROP POLICY IF EXISTS "Members can update (updated_at)" ON conversations;
 CREATE POLICY "Members can update (updated_at)"
   ON conversations FOR UPDATE
   USING (auth.uid() = user1_id OR auth.uid() = user2_id);
 
 -- Messages: only conversation members
+DROP POLICY IF EXISTS "Members can view messages" ON messages;
 CREATE POLICY "Members can view messages"
   ON messages FOR SELECT
   USING (
@@ -53,6 +102,7 @@ CREATE POLICY "Members can view messages"
     )
   );
 
+DROP POLICY IF EXISTS "Members can insert messages" ON messages;
 CREATE POLICY "Members can insert messages"
   ON messages FOR INSERT
   WITH CHECK (
@@ -65,8 +115,15 @@ CREATE POLICY "Members can insert messages"
   );
 
 -- 4. Realtime (enable for both tables)
-ALTER PUBLICATION supabase_realtime ADD TABLE conversations;
-ALTER PUBLICATION supabase_realtime ADD TABLE messages;
+DO $$ BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE conversations;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE messages;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- 5. Index for performance
 CREATE INDEX IF NOT EXISTS idx_messages_conversation_id ON messages(conversation_id);

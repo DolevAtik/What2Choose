@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Send, ArrowLeft, MessageCircle, Search, X, ExternalLink } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { withTimeout } from '../lib/withTimeout'
+import { getOrCreateConversation } from '../lib/chat'
 import { useAuth } from '../hooks/useAuth'
 import { toast } from '../lib/toast'
 import { useLanguage } from '../contexts/LanguageContext'
@@ -61,9 +62,9 @@ export default function ChatPage() {
               .select('*, post:posts(id, question, option_a_url, author:profiles!author_id(username))')
               .eq('id', payload.new.id)
               .single()
-            setMessages(prev => [...prev, data || payload.new])
+            setMessages(prev => appendMessage(prev, data || payload.new))
           } else {
-            setMessages(prev => [...prev, payload.new])
+            setMessages(prev => appendMessage(prev, payload.new))
           }
         })
         .subscribe()
@@ -73,6 +74,13 @@ export default function ChatPage() {
   }, [selectedConv?.id])
 
   const containerRef = useRef(null)
+
+  function appendMessage(currentMessages, message) {
+    if (!message?.id || currentMessages.some((existing) => existing.id === message.id)) {
+      return currentMessages
+    }
+    return [...currentMessages, message]
+  }
 
   // Scroll to bottom on new message
   useEffect(() => {
@@ -200,46 +208,23 @@ export default function ChatPage() {
 
   async function openOrCreateConversation(otherUserId) {
     try {
-      const { data: existing } = await withTimeout(
-        supabase
-          .from('conversations')
-          .select('*')
-          .or(`and(user1_id.eq.${user.id},user2_id.eq.${otherUserId}),and(user1_id.eq.${otherUserId},user2_id.eq.${user.id})`)
-          .maybeSingle(),
+      const conversation = await getOrCreateConversation(user.id, otherUserId)
+      const otherId = conversation.user1_id === user.id ? conversation.user2_id : conversation.user1_id
+      const { data: otherProfile } = await withTimeout(
+        supabase.from('profiles').select('id, username, avatar_url').eq('id', otherId).single(),
         12000,
-        'Opening conversation timed out'
+        'Loading profile timed out'
       )
 
-      if (existing) {
-        const otherId = existing.user1_id === user.id ? existing.user2_id : existing.user1_id
-        const { data: otherProfile } = await withTimeout(
-          supabase.from('profiles').select('*').eq('id', otherId).single(),
-          12000,
-          'Loading profile timed out'
-        )
-        setSelectedConv({ ...existing, otherUser: otherProfile })
-      } else {
-        const { data: newConv } = await withTimeout(
-          supabase
-            .from('conversations')
-            .insert({ user1_id: user.id, user2_id: otherUserId })
-            .select()
-            .single(),
-          12000,
-          'Creating conversation timed out'
-        )
-        const { data: otherProfile } = await withTimeout(
-          supabase.from('profiles').select('*').eq('id', otherUserId).single(),
-          12000,
-          'Loading profile timed out'
-        )
-        if (newConv) {
-          const conv = { ...newConv, otherUser: otherProfile, messages: [] }
-          setConversations(prev => [conv, ...prev])
-          setSelectedConv(conv)
-        }
+      const conv = { ...conversation, otherUser: otherProfile, messages: [] }
+      setConversations(prev => {
+        if (prev.some(existing => existing.id === conv.id)) return prev
+        return [conv, ...prev]
+      })
+      setSelectedConv(conv)
+      if (conversation) {
+        await loadConversations()
       }
-      await loadConversations()
     } catch (e) {
       console.warn('Chat not available yet – run the SQL migration first', e)
     }

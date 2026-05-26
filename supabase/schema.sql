@@ -77,6 +77,10 @@ drop policy if exists "Users can insert own profile" on public.profiles;
 create policy "Users can insert own profile" on public.profiles
   for insert with check (auth.uid() = id);
 
+-- Keep account emails private while preserving public profile cards/search.
+revoke select on public.profiles from anon, authenticated;
+grant select (id, username, avatar_url, created_at) on public.profiles to anon, authenticated;
+
 -- Posts: public read, auth insert, owner delete
 drop policy if exists "Posts are public" on public.posts;
 create policy "Posts are public" on public.posts
@@ -152,7 +156,7 @@ drop policy if exists "Auth users can upload post-images" on storage.objects;
 create policy "Auth users can upload post-images" on storage.objects
   for insert with check (
     bucket_id = 'post-images' and
-    auth.uid() is not null
+    auth.uid()::text = (storage.foldername(name))[1]
   );
 
 drop policy if exists "Users can delete own post-images" on storage.objects;
