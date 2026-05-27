@@ -33,7 +33,7 @@ export default function ProfilePage() {
       const { data: userPosts } = await withTimeout(
         supabase
           .from('posts')
-          .select('*, profiles(username, avatar_url, email)')
+          .select('*, profiles(username, avatar_url)')
           .eq('author_id', user.id)
           .order('created_at', { ascending: false }),
         12000,
@@ -109,8 +109,8 @@ export default function ProfilePage() {
 
       const file = event.target.files[0]
       const fileExt = file.name.split('.').pop()
-      const fileName = `${user.id}-${Math.random()}.${fileExt}`
-      const filePath = `${fileName}`
+      const fileName = `${globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`}.${fileExt}`
+      const filePath = `${user.id}/${fileName}`
 
       const { error: uploadError } = await withTimeout(
         supabase.storage
