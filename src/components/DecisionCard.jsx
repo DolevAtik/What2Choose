@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import confetti from 'canvas-confetti'
 import { supabase } from '../lib/supabase'
+import { getOrCreateConversation } from '../lib/chat'
 import { useAuth } from '../hooks/useAuth'
 import { useLanguage } from '../contexts/LanguageContext'
 import CommentSection from './CommentSection'
@@ -42,7 +43,7 @@ export default function DecisionCard({ post }) {
   const [showVoters, setShowVoters] = useState(false)
   const [votersLoading, setVotersLoading] = useState(false)
   const [votersError, setVotersError] = useState('')
-  const [voters, setVoters] = useState([]) // { choice, user_id, profiles: { username, avatar_url, email } }
+  const [voters, setVoters] = useState([]) // { choice, user_id, profiles: { username, avatar_url } }
   const shareMenuRef = useRef(null)
 
   const hasLoaded = useRef(false)
@@ -152,7 +153,7 @@ export default function DecisionCard({ post }) {
     try {
       const { data, error } = await supabase
         .from('votes')
-        .select('choice, user_id, profiles(username, avatar_url, email)')
+        .select('choice, user_id, profiles(username, avatar_url)')
         .eq('post_id', post.id)
         .order('created_at', { ascending: false })
 
@@ -226,31 +227,12 @@ export default function DecisionCard({ post }) {
     if (!user || chatSending) return
     setChatSending(true)
     try {
-      // Get or create conversation
-      const { data: existing, error: existError } = await supabase
-        .from('conversations')
-        .select('id')
-        .or(`and(user1_id.eq.${user.id},user2_id.eq.${targetUserId}),and(user1_id.eq.${targetUserId},user2_id.eq.${user.id})`)
-        .maybeSingle()
+      const conversation = await getOrCreateConversation(user.id, targetUserId, 'id')
+      const convId = conversation?.id
+      if (!convId) throw new Error('Conversation was not created.')
 
-      if (existError) throw existError
-
-      let convId = existing?.id
-      if (!convId) {
-        const { data: newConv, error: newConvError } = await supabase
-          .from('conversations')
-          .insert({ user1_id: user.id, user2_id: targetUserId })
-          .select('id')
-          .single()
-        
-        if (newConvError) throw newConvError
-        convId = newConv?.id
-      }
-
-      if (convId) {
-        const { error: msgError } = await supabase.from('messages').insert({ conversation_id: convId, sender_id: user.id, post_id: post.id })
-        if (msgError) throw msgError
-      }
+      const { error: msgError } = await supabase.from('messages').insert({ conversation_id: convId, sender_id: user.id, post_id: post.id })
+      if (msgError) throw msgError
       
       toast.success(t('sentToChat'))
     } catch (err) {
@@ -269,16 +251,19 @@ export default function DecisionCard({ post }) {
     if (!window.confirm(t('confirmDeletePost'))) return
     setIsDeleting(true)
     try {
-      await supabase.from('posts').delete().eq('id', post.id)
+      const { data, error } = await supabase.from('posts').delete().eq('id', post.id).select('id').maybeSingle()
+      if (error) throw error
+      if (!data) throw new Error('Post was not deleted.')
       setIsDeleted(true)
     } catch (err) {
       console.error('Error deleting post:', err)
       toast.error(t('failedToDeletePost'))
+    } finally {
       setIsDeleting(false)
     }
   }
 
-  const authorName = post.profiles?.username || post.profiles?.email?.split('@')[0] || 'User'
+  const authorName = post.profiles?.username || 'User'
   const avatarUrl = post.profiles?.avatar_url
 
   // Layout grid class
@@ -692,7 +677,7 @@ export default function DecisionCard({ post }) {
                           </div>
                           <div className="p-3 space-y-2">
                             {group.map((v) => {
-                              const name = v.profiles?.username || v.profiles?.email?.split('@')[0] || 'User'
+                              const name = v.profiles?.username || 'User'
                               const avatar = v.profiles?.avatar_url
                               return (
                                 <div key={`${v.user_id}-${opt.letter}`} className="flex items-center gap-3 p-2 rounded-xl hover:bg-white/5 transition-colors">
