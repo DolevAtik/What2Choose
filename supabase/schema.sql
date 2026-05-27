@@ -69,6 +69,10 @@ drop policy if exists "Public profiles are viewable" on public.profiles;
 create policy "Public profiles are viewable" on public.profiles
   for select using (true);
 
+-- Public profile reads must not expose email addresses through the client API.
+revoke select on public.profiles from anon, authenticated;
+grant select (id, username, avatar_url, created_at) on public.profiles to anon, authenticated;
+
 drop policy if exists "Users can update own profile" on public.profiles;
 create policy "Users can update own profile" on public.profiles
   for update using (auth.uid() = id);
@@ -152,7 +156,7 @@ drop policy if exists "Auth users can upload post-images" on storage.objects;
 create policy "Auth users can upload post-images" on storage.objects
   for insert with check (
     bucket_id = 'post-images' and
-    auth.uid() is not null
+    auth.uid()::text = (storage.foldername(name))[1]
   );
 
 drop policy if exists "Users can delete own post-images" on storage.objects;

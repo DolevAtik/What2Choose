@@ -4,9 +4,15 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Send, ArrowLeft, MessageCircle, Search, X, ExternalLink } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { withTimeout } from '../lib/withTimeout'
+import { getOrCreateConversation } from '../lib/chat'
 import { useAuth } from '../hooks/useAuth'
 import { toast } from '../lib/toast'
 import { useLanguage } from '../contexts/LanguageContext'
+
+function mergeMessage(prev, message) {
+  if (!message || prev.some((m) => m.id === message.id)) return prev
+  return [...prev, message].sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+}
 
 export default function ChatPage() {
   const { userId: targetUserId } = useParams()
@@ -26,12 +32,36 @@ export default function ChatPage() {
   const [searching, setSearching] = useState(false)
   const messagesEndRef = useRef(null)
   const inputRef = useRef(null)
+  const selectedConvIdRef = useRef(null)
+  const messageLoadSeq = useRef(0)
 
   // Load conversations on mount
   useEffect(() => {
     if (!user) return
     loadConversations()
-  }, [user])
+
+    let channel = null
+    try {
+      const refresh = () => { loadConversations() }
+      channel = supabase
+        .channel(`conversations:${user.id}`)
+        .on('postgres_changes', {
+          event: '*',
+          schema: 'public',
+          table: 'conversations',
+          filter: `user1_id=eq.${user.id}`,
+        }, refresh)
+        .on('postgres_changes', {
+          event: '*',
+          schema: 'public',
+          table: 'conversations',
+          filter: `user2_id=eq.${user.id}`,
+        }, refresh)
+        .subscribe()
+    } catch (e) { /* chat tables may not be installed yet */ }
+
+    return () => { if (channel) supabase.removeChannel(channel) }
+  }, [user?.id])
 
   // Auto-open conversation if userId in URL
   useEffect(() => {
@@ -39,9 +69,14 @@ export default function ChatPage() {
     openOrCreateConversation(targetUserId)
   }, [targetUserId, user])
 
+  useEffect(() => {
+    selectedConvIdRef.current = selectedConv?.id || null
+  }, [selectedConv?.id])
+
   // Real-time messages subscription
   useEffect(() => {
     if (!selectedConv) return
+    setMessages([])
     setLoadingMsgs(true)
     loadMessages(selectedConv.id)
 
@@ -61,9 +96,13 @@ export default function ChatPage() {
               .select('*, post:posts(id, question, option_a_url, author:profiles!author_id(username))')
               .eq('id', payload.new.id)
               .single()
-            setMessages(prev => [...prev, data || payload.new])
+            if (selectedConvIdRef.current === selectedConv.id) {
+              setMessages(prev => mergeMessage(prev, data || payload.new))
+            }
           } else {
-            setMessages(prev => [...prev, payload.new])
+            if (selectedConvIdRef.current === selectedConv.id) {
+              setMessages(prev => mergeMessage(prev, payload.new))
+            }
           }
         })
         .subscribe()
@@ -89,7 +128,7 @@ export default function ChatPage() {
         supabase
           .from('conversations')
           .select(`*`)
-          .order('created_at', { ascending: false }),
+          .order('updated_at', { ascending: false }),
         12000,
         'Loading conversations timed out'
       )
@@ -175,6 +214,7 @@ export default function ChatPage() {
   }
 
   async function loadMessages(convId) {
+    const requestId = ++messageLoadSeq.current
     try {
       const { data, error } = await withTimeout(
         supabase
@@ -190,55 +230,31 @@ export default function ChatPage() {
         console.error('Error loading messages:', error)
         throw error
       }
+      if (selectedConvIdRef.current !== convId || requestId !== messageLoadSeq.current) return
       setMessages(data || [])
     } catch (e) {
       console.error('loadMessages exception:', e)
     } finally {
-      setLoadingMsgs(false)
+      if (selectedConvIdRef.current === convId && requestId === messageLoadSeq.current) {
+        setLoadingMsgs(false)
+      }
     }
   }
 
   async function openOrCreateConversation(otherUserId) {
     try {
-      const { data: existing } = await withTimeout(
-        supabase
-          .from('conversations')
-          .select('*')
-          .or(`and(user1_id.eq.${user.id},user2_id.eq.${otherUserId}),and(user1_id.eq.${otherUserId},user2_id.eq.${user.id})`)
-          .maybeSingle(),
+      const conversation = await getOrCreateConversation(user.id, otherUserId)
+      const otherId = conversation.user1_id === user.id ? conversation.user2_id : conversation.user1_id
+      const { data: otherProfile, error: profileError } = await withTimeout(
+        supabase.from('profiles').select('id, username, avatar_url').eq('id', otherId).single(),
         12000,
-        'Opening conversation timed out'
+        'Loading profile timed out'
       )
+      if (profileError) throw profileError
 
-      if (existing) {
-        const otherId = existing.user1_id === user.id ? existing.user2_id : existing.user1_id
-        const { data: otherProfile } = await withTimeout(
-          supabase.from('profiles').select('*').eq('id', otherId).single(),
-          12000,
-          'Loading profile timed out'
-        )
-        setSelectedConv({ ...existing, otherUser: otherProfile })
-      } else {
-        const { data: newConv } = await withTimeout(
-          supabase
-            .from('conversations')
-            .insert({ user1_id: user.id, user2_id: otherUserId })
-            .select()
-            .single(),
-          12000,
-          'Creating conversation timed out'
-        )
-        const { data: otherProfile } = await withTimeout(
-          supabase.from('profiles').select('*').eq('id', otherUserId).single(),
-          12000,
-          'Loading profile timed out'
-        )
-        if (newConv) {
-          const conv = { ...newConv, otherUser: otherProfile, messages: [] }
-          setConversations(prev => [conv, ...prev])
-          setSelectedConv(conv)
-        }
-      }
+      const conv = { ...conversation, otherUser: otherProfile, messages: [] }
+      setConversations(prev => prev.some(c => c.id === conv.id) ? prev.map(c => c.id === conv.id ? { ...c, ...conv } : c) : [conv, ...prev])
+      setSelectedConv(conv)
       await loadConversations()
     } catch (e) {
       console.warn('Chat not available yet – run the SQL migration first', e)
@@ -250,23 +266,27 @@ export default function ChatPage() {
     if (!newMsg.trim() || !selectedConv || sending) return
     setSending(true)
     const content = newMsg.trim()
-    setNewMsg('')
 
     try {
-      const { error } = await withTimeout(
-        supabase.from('messages').insert({
-          conversation_id: selectedConv.id,
-          sender_id: user.id,
-          content,
-        }),
+      const { data, error } = await withTimeout(
+        supabase
+          .from('messages')
+          .insert({
+            conversation_id: selectedConv.id,
+            sender_id: user.id,
+            content,
+          })
+          .select('*, post:posts(id, question, option_a_url, author:profiles!author_id(username))')
+          .single(),
         12000,
         'Sending message timed out'
       )
 
       if (error) throw error
 
-      // Fetch the updated messages list immediately as a fallback if Realtime is delayed
-      loadMessages(selectedConv.id)
+      setNewMsg('')
+      setMessages(prev => mergeMessage(prev, data))
+      loadConversations()
     } catch (err) {
       console.error('Send message error:', err)
       toast.error(err?.message ? `Error sending message: ${err.message}` : 'Error sending message')
