@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import { withTimeout } from '../lib/withTimeout'
 
 export const AuthContext = createContext(null)
+const PUBLIC_PROFILE_COLUMNS = 'id, username, avatar_url, created_at'
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(undefined)
@@ -41,6 +42,8 @@ export function AuthProvider({ children }) {
           await ensureProfile(currentUser).catch(err => {
             console.error('Initial profile fetch failed:', err)
           })
+        } else {
+          setProfile(null)
         }
 
         // Clear loading state on first significant event
@@ -63,9 +66,9 @@ export function AuthProvider({ children }) {
     const { data: existingProfile } = await withTimeout(
       supabase
         .from('profiles')
-        .select('*')
+        .select(PUBLIC_PROFILE_COLUMNS)
         .eq('id', currentUser.id)
-        .single(),
+        .maybeSingle(),
       12000,
       'Loading profile timed out'
     )
@@ -77,36 +80,51 @@ export function AuthProvider({ children }) {
 
     // New user (social login, etc.) – create profile
     const username =
+      currentUser.user_metadata?.username ||
       currentUser.user_metadata?.full_name ||
       currentUser.user_metadata?.name ||
       currentUser.email?.split('@')[0]
 
-    const { data: newProfile, error: createError } = await withTimeout(
+    const { error: createError } = await withTimeout(
       supabase
         .from('profiles')
-        .upsert({
+        .insert({
           id: currentUser.id,
           username: username || 'User',
           avatar_url: currentUser.user_metadata?.avatar_url || null,
           email: currentUser.email,
-        })
-        .select()
-        .single(),
+        }),
       12000,
       'Creating profile timed out'
     )
 
-    if (createError) console.error('Failed to create initial profile:', createError)
-    setProfile(newProfile)
-    return newProfile
+    if (createError && createError.code !== '23505') console.error('Failed to create initial profile:', createError)
+
+    const { data: newProfile } = await withTimeout(
+      supabase
+        .from('profiles')
+        .select(PUBLIC_PROFILE_COLUMNS)
+        .eq('id', currentUser.id)
+        .maybeSingle(),
+      12000,
+      'Loading created profile timed out'
+    )
+
+    const profileRow = newProfile || {
+      id: currentUser.id,
+      username: username || 'User',
+      avatar_url: currentUser.user_metadata?.avatar_url || null,
+    }
+    setProfile(profileRow)
+    return profileRow
   }
 
   async function fetchProfile(userId) {
     const { data, error } = await supabase
       .from('profiles')
-      .select('*')
+      .select(PUBLIC_PROFILE_COLUMNS)
       .eq('id', userId)
-      .single()
+      .maybeSingle()
 
     if (error && error.code !== 'PGRST116') {
       console.error('Error fetching profile:', error)
@@ -161,12 +179,30 @@ export function AuthProvider({ children }) {
   async function updateProfile(updates) {
     const { data, error } = await supabase
       .from('profiles')
-      .upsert({ id: user.id, ...updates })
-      .select()
-      .single()
+      .update(updates)
+      .eq('id', user.id)
+      .select(PUBLIC_PROFILE_COLUMNS)
+      .maybeSingle()
     if (error) throw error
-    setProfile(data)
-    return data
+    if (data) {
+      setProfile(data)
+      return data
+    }
+
+    const username =
+      user.user_metadata?.username ||
+      user.user_metadata?.full_name ||
+      user.user_metadata?.name ||
+      user.email?.split('@')[0] ||
+      'User'
+    const { data: inserted, error: insertError } = await supabase
+      .from('profiles')
+      .insert({ id: user.id, email: user.email, username, ...updates })
+      .select(PUBLIC_PROFILE_COLUMNS)
+      .single()
+    if (insertError) throw insertError
+    setProfile(inserted)
+    return inserted
   }
 
   return (
