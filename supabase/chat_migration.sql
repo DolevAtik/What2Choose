@@ -9,9 +9,11 @@ CREATE TABLE IF NOT EXISTS conversations (
   user1_id    uuid REFERENCES auth.users NOT NULL,
   user2_id    uuid REFERENCES auth.users NOT NULL,
   created_at  timestamptz DEFAULT now(),
-  updated_at  timestamptz DEFAULT now(),
-  UNIQUE (user1_id, user2_id)
+  updated_at  timestamptz DEFAULT now()
 );
+
+ALTER TABLE conversations
+  DROP CONSTRAINT IF EXISTS conversations_user1_id_user2_id_key;
 
 -- 2. Messages table
 CREATE TABLE IF NOT EXISTS messages (
@@ -19,30 +21,76 @@ CREATE TABLE IF NOT EXISTS messages (
   conversation_id uuid REFERENCES conversations(id) ON DELETE CASCADE NOT NULL,
   sender_id       uuid REFERENCES auth.users NOT NULL,
   content         text,                          -- null when sharing a post
-  post_id         uuid REFERENCES posts(id),     -- null for text messages
+  post_id         uuid REFERENCES posts(id) ON DELETE CASCADE, -- null for text messages
   read            boolean DEFAULT false,
   created_at      timestamptz DEFAULT now(),
   CHECK (content IS NOT NULL OR post_id IS NOT NULL)
 );
+
+ALTER TABLE messages
+  DROP CONSTRAINT IF EXISTS messages_post_id_fkey;
+
+ALTER TABLE messages
+  ADD CONSTRAINT messages_post_id_fkey
+  FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE CASCADE;
+
+-- Collapse duplicate rows for the same unordered user pair before enforcing uniqueness.
+WITH ranked_conversations AS (
+  SELECT
+    id,
+    FIRST_VALUE(id) OVER (
+      PARTITION BY LEAST(user1_id, user2_id), GREATEST(user1_id, user2_id)
+      ORDER BY created_at, id
+    ) AS keep_id,
+    ROW_NUMBER() OVER (
+      PARTITION BY LEAST(user1_id, user2_id), GREATEST(user1_id, user2_id)
+      ORDER BY created_at, id
+    ) AS row_num
+  FROM conversations
+)
+UPDATE messages m
+SET conversation_id = r.keep_id
+FROM ranked_conversations r
+WHERE m.conversation_id = r.id
+  AND r.row_num > 1;
+
+WITH ranked_conversations AS (
+  SELECT
+    id,
+    ROW_NUMBER() OVER (
+      PARTITION BY LEAST(user1_id, user2_id), GREATEST(user1_id, user2_id)
+      ORDER BY created_at, id
+    ) AS row_num
+  FROM conversations
+)
+DELETE FROM conversations c
+USING ranked_conversations r
+WHERE c.id = r.id
+  AND r.row_num > 1;
+
+CREATE UNIQUE INDEX IF NOT EXISTS conversations_unique_user_pair
+  ON conversations (LEAST(user1_id, user2_id), GREATEST(user1_id, user2_id));
 
 -- 3. Row Level Security
 ALTER TABLE conversations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE messages      ENABLE ROW LEVEL SECURITY;
 
 -- Conversations: only members can see/create
+DROP POLICY IF EXISTS "Members can view their conversations" ON conversations;
 CREATE POLICY "Members can view their conversations"
   ON conversations FOR SELECT
   USING (auth.uid() = user1_id OR auth.uid() = user2_id);
 
+DROP POLICY IF EXISTS "Authenticated users can create conversations" ON conversations;
 CREATE POLICY "Authenticated users can create conversations"
   ON conversations FOR INSERT
-  WITH CHECK (auth.uid() = user1_id);
+  WITH CHECK (auth.uid() = user1_id OR auth.uid() = user2_id);
 
-CREATE POLICY "Members can update (updated_at)"
-  ON conversations FOR UPDATE
-  USING (auth.uid() = user1_id OR auth.uid() = user2_id);
+DROP POLICY IF EXISTS "Members can update (updated_at)" ON conversations;
+REVOKE UPDATE ON conversations FROM anon, authenticated;
 
 -- Messages: only conversation members
+DROP POLICY IF EXISTS "Members can view messages" ON messages;
 CREATE POLICY "Members can view messages"
   ON messages FOR SELECT
   USING (
@@ -53,6 +101,7 @@ CREATE POLICY "Members can view messages"
     )
   );
 
+DROP POLICY IF EXISTS "Members can insert messages" ON messages;
 CREATE POLICY "Members can insert messages"
   ON messages FOR INSERT
   WITH CHECK (
@@ -64,9 +113,31 @@ CREATE POLICY "Members can insert messages"
     )
   );
 
+CREATE OR REPLACE FUNCTION public.touch_conversation_updated_at()
+RETURNS trigger AS $$
+BEGIN
+  UPDATE public.conversations
+  SET updated_at = now()
+  WHERE id = NEW.conversation_id;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
+DROP TRIGGER IF EXISTS on_message_created_touch_conversation ON public.messages;
+CREATE TRIGGER on_message_created_touch_conversation
+  AFTER INSERT ON public.messages
+  FOR EACH ROW EXECUTE FUNCTION public.touch_conversation_updated_at();
+
 -- 4. Realtime (enable for both tables)
-ALTER PUBLICATION supabase_realtime ADD TABLE conversations;
-ALTER PUBLICATION supabase_realtime ADD TABLE messages;
+DO $$ BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE conversations;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE messages;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- 5. Index for performance
 CREATE INDEX IF NOT EXISTS idx_messages_conversation_id ON messages(conversation_id);
