@@ -77,6 +77,14 @@ drop policy if exists "Users can insert own profile" on public.profiles;
 create policy "Users can insert own profile" on public.profiles
   for insert with check (auth.uid() = id);
 
+-- Profiles include email for auth/bootstrap bookkeeping, but clients only need
+-- the public profile shape. Column grants prevent public email enumeration.
+revoke select on public.profiles from anon, authenticated;
+grant select (id, username, avatar_url, created_at) on public.profiles to anon, authenticated;
+revoke update on public.profiles from anon, authenticated;
+grant update (username, avatar_url) on public.profiles to authenticated;
+grant insert (id, email, username, avatar_url) on public.profiles to authenticated;
+
 -- Posts: public read, auth insert, owner delete
 drop policy if exists "Posts are public" on public.posts;
 create policy "Posts are public" on public.posts
@@ -95,9 +103,45 @@ drop policy if exists "Votes are public" on public.votes;
 create policy "Votes are public" on public.votes
   for select using (true);
 
+-- Public vote counts require choices, not voter identity. Use the RPC helpers
+-- below for self/author-only voter reads.
+revoke select on public.votes from anon, authenticated;
+grant select (post_id, choice) on public.votes to anon, authenticated;
+
 drop policy if exists "Auth users can vote" on public.votes;
 create policy "Auth users can vote" on public.votes
   for insert with check (auth.uid() = user_id);
+
+create or replace function public.get_my_vote(target_post_id uuid)
+returns table(choice text)
+language sql
+security definer
+set search_path = public
+as $$
+  select v.choice
+  from public.votes v
+  where v.post_id = target_post_id
+    and v.user_id = auth.uid()
+  limit 1;
+$$;
+
+create or replace function public.get_post_voters(target_post_id uuid)
+returns table(choice text, user_id uuid, username text, avatar_url text)
+language sql
+security definer
+set search_path = public
+as $$
+  select v.choice, v.user_id, p.username, p.avatar_url
+  from public.votes v
+  join public.posts po on po.id = v.post_id
+  left join public.profiles p on p.id = v.user_id
+  where v.post_id = target_post_id
+    and po.author_id = auth.uid()
+  order by v.created_at desc;
+$$;
+
+grant execute on function public.get_my_vote(uuid) to anon, authenticated;
+grant execute on function public.get_post_voters(uuid) to authenticated;
 
 -- Comments: public read, auth insert, owner delete
 drop policy if exists "Comments are public" on public.comments;
@@ -152,7 +196,7 @@ drop policy if exists "Auth users can upload post-images" on storage.objects;
 create policy "Auth users can upload post-images" on storage.objects
   for insert with check (
     bucket_id = 'post-images' and
-    auth.uid() is not null
+    auth.uid()::text = (storage.foldername(name))[1]
   );
 
 drop policy if exists "Users can delete own post-images" on storage.objects;

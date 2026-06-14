@@ -7,6 +7,7 @@ import { withTimeout } from '../lib/withTimeout'
 import { useAuth } from '../hooks/useAuth'
 import { toast } from '../lib/toast'
 import { useLanguage } from '../contexts/LanguageContext'
+import { getOrCreateConversation } from '../lib/chat'
 
 export default function ChatPage() {
   const { userId: targetUserId } = useParams()
@@ -61,9 +62,10 @@ export default function ChatPage() {
               .select('*, post:posts(id, question, option_a_url, author:profiles!author_id(username))')
               .eq('id', payload.new.id)
               .single()
-            setMessages(prev => [...prev, data || payload.new])
+            const nextMessage = data || payload.new
+            setMessages(prev => prev.some(msg => msg.id === nextMessage.id) ? prev : [...prev, nextMessage])
           } else {
-            setMessages(prev => [...prev, payload.new])
+            setMessages(prev => prev.some(msg => msg.id === payload.new.id) ? prev : [...prev, payload.new])
           }
         })
         .subscribe()
@@ -213,23 +215,15 @@ export default function ChatPage() {
       if (existing) {
         const otherId = existing.user1_id === user.id ? existing.user2_id : existing.user1_id
         const { data: otherProfile } = await withTimeout(
-          supabase.from('profiles').select('*').eq('id', otherId).single(),
+          supabase.from('profiles').select('id, username, avatar_url').eq('id', otherId).single(),
           12000,
           'Loading profile timed out'
         )
         setSelectedConv({ ...existing, otherUser: otherProfile })
       } else {
-        const { data: newConv } = await withTimeout(
-          supabase
-            .from('conversations')
-            .insert({ user1_id: user.id, user2_id: otherUserId })
-            .select()
-            .single(),
-          12000,
-          'Creating conversation timed out'
-        )
+        const newConv = await getOrCreateConversation(user.id, otherUserId)
         const { data: otherProfile } = await withTimeout(
-          supabase.from('profiles').select('*').eq('id', otherUserId).single(),
+          supabase.from('profiles').select('id, username, avatar_url').eq('id', otherUserId).single(),
           12000,
           'Loading profile timed out'
         )
@@ -269,6 +263,7 @@ export default function ChatPage() {
       loadMessages(selectedConv.id)
     } catch (err) {
       console.error('Send message error:', err)
+      setNewMsg(content)
       toast.error(err?.message ? `Error sending message: ${err.message}` : 'Error sending message')
     } finally {
       setSending(false)
