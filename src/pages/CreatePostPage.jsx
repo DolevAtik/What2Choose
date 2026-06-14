@@ -144,10 +144,10 @@ export default function CreatePostPage() {
       }
       
       // Ensure profile exists before inserting posts (FK: posts.author_id -> profiles.id)
-      await withTimeout(
+      const { error: profileError } = await withTimeout(
         supabase
           .from('profiles')
-          .upsert({
+          .insert({
             id: user.id,
             email: user.email,
             username:
@@ -160,6 +160,7 @@ export default function CreatePostPage() {
         12000,
         'Preparing your profile timed out'
       )
+      if (profileError && profileError.code !== '23505') throw profileError
 
       let urls = []
       if (optionType === 'images') {

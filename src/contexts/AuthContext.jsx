@@ -41,6 +41,8 @@ export function AuthProvider({ children }) {
           await ensureProfile(currentUser).catch(err => {
             console.error('Initial profile fetch failed:', err)
           })
+        } else {
+          setProfile(null)
         }
 
         // Clear loading state on first significant event
@@ -63,7 +65,7 @@ export function AuthProvider({ children }) {
     const { data: existingProfile } = await withTimeout(
       supabase
         .from('profiles')
-        .select('*')
+        .select('id, username, avatar_url, created_at')
         .eq('id', currentUser.id)
         .single(),
       12000,
@@ -81,30 +83,29 @@ export function AuthProvider({ children }) {
       currentUser.user_metadata?.name ||
       currentUser.email?.split('@')[0]
 
-    const { data: newProfile, error: createError } = await withTimeout(
+    const { error: createError } = await withTimeout(
       supabase
         .from('profiles')
-        .upsert({
+        .insert({
           id: currentUser.id,
           username: username || 'User',
           avatar_url: currentUser.user_metadata?.avatar_url || null,
           email: currentUser.email,
-        })
-        .select()
-        .single(),
+        }),
       12000,
       'Creating profile timed out'
     )
 
-    if (createError) console.error('Failed to create initial profile:', createError)
-    setProfile(newProfile)
-    return newProfile
+    if (createError && createError.code !== '23505') {
+      console.error('Failed to create initial profile:', createError)
+    }
+    return fetchProfile(currentUser.id)
   }
 
   async function fetchProfile(userId) {
     const { data, error } = await supabase
       .from('profiles')
-      .select('*')
+      .select('id, username, avatar_url, created_at')
       .eq('id', userId)
       .single()
 
@@ -161,8 +162,9 @@ export function AuthProvider({ children }) {
   async function updateProfile(updates) {
     const { data, error } = await supabase
       .from('profiles')
-      .upsert({ id: user.id, ...updates })
-      .select()
+      .update(updates)
+      .eq('id', user.id)
+      .select('id, username, avatar_url, created_at')
       .single()
     if (error) throw error
     setProfile(data)

@@ -19,11 +19,42 @@ CREATE TABLE IF NOT EXISTS messages (
   conversation_id uuid REFERENCES conversations(id) ON DELETE CASCADE NOT NULL,
   sender_id       uuid REFERENCES auth.users NOT NULL,
   content         text,                          -- null when sharing a post
-  post_id         uuid REFERENCES posts(id),     -- null for text messages
+  post_id         uuid REFERENCES posts(id) ON DELETE CASCADE, -- null for text messages
   read            boolean DEFAULT false,
   created_at      timestamptz DEFAULT now(),
   CHECK (content IS NOT NULL OR post_id IS NOT NULL)
 );
+
+-- Merge any existing reversed duplicate pairs before enforcing unordered
+-- uniqueness; messages are kept by moving them to the oldest conversation.
+WITH ranked AS (
+  SELECT
+    id,
+    FIRST_VALUE(id) OVER (
+      PARTITION BY LEAST(user1_id, user2_id), GREATEST(user1_id, user2_id)
+      ORDER BY created_at, id
+    ) AS keep_id,
+    ROW_NUMBER() OVER (
+      PARTITION BY LEAST(user1_id, user2_id), GREATEST(user1_id, user2_id)
+      ORDER BY created_at, id
+    ) AS rn
+  FROM conversations
+),
+repointed AS (
+  UPDATE messages m
+  SET conversation_id = r.keep_id
+  FROM ranked r
+  WHERE m.conversation_id = r.id
+    AND r.rn > 1
+  RETURNING m.id
+)
+DELETE FROM conversations c
+USING ranked r
+WHERE c.id = r.id
+  AND r.rn > 1;
+
+CREATE UNIQUE INDEX IF NOT EXISTS conversations_unordered_pair_idx
+  ON conversations (LEAST(user1_id, user2_id), GREATEST(user1_id, user2_id));
 
 -- 3. Row Level Security
 ALTER TABLE conversations ENABLE ROW LEVEL SECURITY;
@@ -36,11 +67,12 @@ CREATE POLICY "Members can view their conversations"
 
 CREATE POLICY "Authenticated users can create conversations"
   ON conversations FOR INSERT
-  WITH CHECK (auth.uid() = user1_id);
+  WITH CHECK (
+    auth.uid() IN (user1_id, user2_id)
+    AND user1_id <> user2_id
+  );
 
-CREATE POLICY "Members can update (updated_at)"
-  ON conversations FOR UPDATE
-  USING (auth.uid() = user1_id OR auth.uid() = user2_id);
+DROP POLICY IF EXISTS "Members can update (updated_at)" ON conversations;
 
 -- Messages: only conversation members
 CREATE POLICY "Members can view messages"
