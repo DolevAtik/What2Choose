@@ -69,6 +69,12 @@ drop policy if exists "Public profiles are viewable" on public.profiles;
 create policy "Public profiles are viewable" on public.profiles
   for select using (true);
 
+-- Email addresses must not be readable through public profile joins.
+revoke select on public.profiles from anon, authenticated;
+grant select (id, username, avatar_url, created_at) on public.profiles to anon, authenticated;
+grant insert (id, email, username, avatar_url) on public.profiles to authenticated;
+grant update (username, avatar_url) on public.profiles to authenticated;
+
 drop policy if exists "Users can update own profile" on public.profiles;
 create policy "Users can update own profile" on public.profiles
   for update using (auth.uid() = id);
@@ -90,14 +96,71 @@ drop policy if exists "Authors can delete own posts" on public.posts;
 create policy "Authors can delete own posts" on public.posts
   for delete using (auth.uid() = author_id);
 
--- Votes: public read, auth insert, no update
+-- Votes: aggregate reads through RPCs, auth insert, no update
 drop policy if exists "Votes are public" on public.votes;
-create policy "Votes are public" on public.votes
-  for select using (true);
+
+revoke select on public.votes from anon, authenticated;
+grant insert (post_id, user_id, choice) on public.votes to authenticated;
 
 drop policy if exists "Auth users can vote" on public.votes;
 create policy "Auth users can vote" on public.votes
   for insert with check (auth.uid() = user_id);
+
+create or replace function public.get_post_vote_counts(target_post_ids uuid[])
+returns table(post_id uuid, choice text, vote_count bigint)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select v.post_id, v.choice, count(*)::bigint
+  from public.votes v
+  where v.post_id = any(target_post_ids)
+  group by v.post_id, v.choice;
+$$;
+
+revoke all on function public.get_post_vote_counts(uuid[]) from public;
+grant execute on function public.get_post_vote_counts(uuid[]) to anon, authenticated;
+
+create or replace function public.get_my_votes(target_post_ids uuid[])
+returns table(post_id uuid, choice text)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select v.post_id, v.choice
+  from public.votes v
+  where auth.uid() is not null
+    and v.user_id = auth.uid()
+    and v.post_id = any(target_post_ids);
+$$;
+
+revoke all on function public.get_my_votes(uuid[]) from public;
+grant execute on function public.get_my_votes(uuid[]) to authenticated;
+
+create or replace function public.get_post_voters(target_post_id uuid)
+returns table(choice text, user_id uuid, username text, avatar_url text)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select v.choice, v.user_id, p.username, p.avatar_url
+  from public.votes v
+  join public.profiles p on p.id = v.user_id
+  where v.post_id = target_post_id
+    and exists (
+      select 1
+      from public.posts owned_post
+      where owned_post.id = target_post_id
+        and owned_post.author_id = auth.uid()
+    )
+  order by v.created_at desc;
+$$;
+
+revoke all on function public.get_post_voters(uuid) from public;
+grant execute on function public.get_post_voters(uuid) to authenticated;
 
 -- Comments: public read, auth insert, owner delete
 drop policy if exists "Comments are public" on public.comments;
@@ -152,7 +215,7 @@ drop policy if exists "Auth users can upload post-images" on storage.objects;
 create policy "Auth users can upload post-images" on storage.objects
   for insert with check (
     bucket_id = 'post-images' and
-    auth.uid() is not null
+    auth.uid()::text = (storage.foldername(name))[1]
   );
 
 drop policy if exists "Users can delete own post-images" on storage.objects;

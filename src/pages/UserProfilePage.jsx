@@ -36,7 +36,7 @@ export default function UserProfilePage() {
     // Profile
     const { data: prof } = await supabase
       .from('profiles')
-      .select('*')
+      .select('id, username, avatar_url, created_at')
       .eq('id', userId)
       .single()
 
@@ -46,7 +46,7 @@ export default function UserProfilePage() {
     // Posts
     const { data: userPosts } = await supabase
       .from('posts')
-      .select('*, profiles(username, avatar_url, email)')
+      .select('*, profiles(username, avatar_url)')
       .eq('author_id', userId)
       .order('created_at', { ascending: false })
 
@@ -56,11 +56,9 @@ export default function UserProfilePage() {
     let totalVotes = 0
     if (userPosts?.length > 0) {
       const postIds = userPosts.map(p => p.id)
-      const { count } = await supabase
-        .from('votes')
-        .select('*', { count: 'exact', head: true })
-        .in('post_id', postIds)
-      totalVotes = count || 0
+      const { data: voteCounts } = await supabase
+        .rpc('get_post_vote_counts', { target_post_ids: postIds })
+      totalVotes = (voteCounts || []).reduce((sum, row) => sum + (Number(row.vote_count) || 0), 0)
     }
 
     // Followers count
@@ -144,7 +142,7 @@ export default function UserProfilePage() {
     )
   }
 
-  const displayName = profileData.username || profileData.email?.split('@')[0] || 'User'
+  const displayName = profileData.username || 'User'
   const avatarUrl = profileData.avatar_url
 
   return (
