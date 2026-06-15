@@ -10,7 +10,8 @@ CREATE TABLE IF NOT EXISTS conversations (
   user2_id    uuid REFERENCES auth.users NOT NULL,
   created_at  timestamptz DEFAULT now(),
   updated_at  timestamptz DEFAULT now(),
-  UNIQUE (user1_id, user2_id)
+  UNIQUE (user1_id, user2_id),
+  CHECK (user1_id <> user2_id)
 );
 
 -- 2. Messages table
@@ -19,7 +20,7 @@ CREATE TABLE IF NOT EXISTS messages (
   conversation_id uuid REFERENCES conversations(id) ON DELETE CASCADE NOT NULL,
   sender_id       uuid REFERENCES auth.users NOT NULL,
   content         text,                          -- null when sharing a post
-  post_id         uuid REFERENCES posts(id),     -- null for text messages
+  post_id         uuid REFERENCES posts(id) ON DELETE CASCADE, -- null for text messages
   read            boolean DEFAULT false,
   created_at      timestamptz DEFAULT now(),
   CHECK (content IS NOT NULL OR post_id IS NOT NULL)
@@ -36,11 +37,13 @@ CREATE POLICY "Members can view their conversations"
 
 CREATE POLICY "Authenticated users can create conversations"
   ON conversations FOR INSERT
-  WITH CHECK (auth.uid() = user1_id);
+  WITH CHECK (
+    auth.uid() in (user1_id, user2_id)
+    AND user1_id <> user2_id
+  );
 
-CREATE POLICY "Members can update (updated_at)"
-  ON conversations FOR UPDATE
-  USING (auth.uid() = user1_id OR auth.uid() = user2_id);
+REVOKE UPDATE ON conversations FROM anon, authenticated;
+GRANT UPDATE (updated_at) ON conversations TO authenticated;
 
 -- Messages: only conversation members
 CREATE POLICY "Members can view messages"
@@ -73,3 +76,21 @@ CREATE INDEX IF NOT EXISTS idx_messages_conversation_id ON messages(conversation
 CREATE INDEX IF NOT EXISTS idx_messages_sender_id       ON messages(sender_id);
 CREATE INDEX IF NOT EXISTS idx_conversations_user1      ON conversations(user1_id);
 CREATE INDEX IF NOT EXISTS idx_conversations_user2      ON conversations(user2_id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS conversations_unordered_pair_idx
+  ON conversations (LEAST(user1_id, user2_id), GREATEST(user1_id, user2_id));
+
+CREATE OR REPLACE FUNCTION public.touch_conversation_on_message()
+RETURNS trigger AS $$
+BEGIN
+  UPDATE public.conversations
+  SET updated_at = now()
+  WHERE id = NEW.conversation_id;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
+DROP TRIGGER IF EXISTS on_message_touch_conversation ON public.messages;
+CREATE TRIGGER on_message_touch_conversation
+  AFTER INSERT ON public.messages
+  FOR EACH ROW EXECUTE FUNCTION public.touch_conversation_on_message();

@@ -8,6 +8,7 @@ import { useAuth } from '../hooks/useAuth'
 import { useLanguage } from '../contexts/LanguageContext'
 import CommentSection from './CommentSection'
 import { toast } from '../lib/toast'
+import { getOrCreateConversation } from '../lib/chat'
 
 const OPTION_LETTERS = ['A', 'B', 'C', 'D']
 
@@ -42,7 +43,7 @@ export default function DecisionCard({ post }) {
   const [showVoters, setShowVoters] = useState(false)
   const [votersLoading, setVotersLoading] = useState(false)
   const [votersError, setVotersError] = useState('')
-  const [voters, setVoters] = useState([]) // { choice, user_id, profiles: { username, avatar_url, email } }
+  const [voters, setVoters] = useState([]) // { choice, user_id, username, avatar_url }
   const shareMenuRef = useRef(null)
 
   const hasLoaded = useRef(false)
@@ -65,19 +66,20 @@ export default function DecisionCard({ post }) {
 
   async function loadData() {
     // Votes
-    const { data: votesData } = await supabase
-      .from('votes').select('choice').eq('post_id', post.id)
+    const { data: votesData, error: votesError } = await supabase
+      .rpc('get_post_vote_counts', { target_post_ids: [post.id] })
 
-    if (votesData) {
+    if (!votesError && votesData) {
       const counts = { A: 0, B: 0, C: 0, D: 0 }
-      votesData.forEach(v => counts[v.choice] = (counts[v.choice] || 0) + 1)
+      votesData.forEach(v => counts[v.choice] = Number(v.vote_count) || 0)
       setVotes(counts)
     }
 
     if (user) {
       // My vote
-      const { data: myVote } = await supabase
-        .from('votes').select('choice').eq('post_id', post.id).eq('user_id', user.id).maybeSingle()
+      const { data: myVotes } = await supabase
+        .rpc('get_my_votes', { target_post_ids: [post.id] })
+      const myVote = myVotes?.[0]
       if (myVote) { setUserVote(myVote.choice); setShowResult(true) }
 
       // My like (graceful – table may not exist yet)
@@ -151,10 +153,7 @@ export default function DecisionCard({ post }) {
     setVotersError('')
     try {
       const { data, error } = await supabase
-        .from('votes')
-        .select('choice, user_id, profiles(username, avatar_url, email)')
-        .eq('post_id', post.id)
-        .order('created_at', { ascending: false })
+        .rpc('get_post_voters', { target_post_id: post.id })
 
       if (error) throw error
       setVoters(data || [])
@@ -226,26 +225,8 @@ export default function DecisionCard({ post }) {
     if (!user || chatSending) return
     setChatSending(true)
     try {
-      // Get or create conversation
-      const { data: existing, error: existError } = await supabase
-        .from('conversations')
-        .select('id')
-        .or(`and(user1_id.eq.${user.id},user2_id.eq.${targetUserId}),and(user1_id.eq.${targetUserId},user2_id.eq.${user.id})`)
-        .maybeSingle()
-
-      if (existError) throw existError
-
-      let convId = existing?.id
-      if (!convId) {
-        const { data: newConv, error: newConvError } = await supabase
-          .from('conversations')
-          .insert({ user1_id: user.id, user2_id: targetUserId })
-          .select('id')
-          .single()
-        
-        if (newConvError) throw newConvError
-        convId = newConv?.id
-      }
+      const conversation = await getOrCreateConversation(user.id, targetUserId)
+      const convId = conversation?.id
 
       if (convId) {
         const { error: msgError } = await supabase.from('messages').insert({ conversation_id: convId, sender_id: user.id, post_id: post.id })
@@ -269,7 +250,13 @@ export default function DecisionCard({ post }) {
     if (!window.confirm(t('confirmDeletePost'))) return
     setIsDeleting(true)
     try {
-      await supabase.from('posts').delete().eq('id', post.id)
+      const { data, error } = await supabase
+        .from('posts')
+        .delete()
+        .eq('id', post.id)
+        .select('id')
+      if (error) throw error
+      if (!data?.length) throw new Error('Post was not deleted.')
       setIsDeleted(true)
     } catch (err) {
       console.error('Error deleting post:', err)
@@ -278,7 +265,7 @@ export default function DecisionCard({ post }) {
     }
   }
 
-  const authorName = post.profiles?.username || post.profiles?.email?.split('@')[0] || 'User'
+  const authorName = post.profiles?.username || 'User'
   const avatarUrl = post.profiles?.avatar_url
 
   // Layout grid class
@@ -692,8 +679,8 @@ export default function DecisionCard({ post }) {
                           </div>
                           <div className="p-3 space-y-2">
                             {group.map((v) => {
-                              const name = v.profiles?.username || v.profiles?.email?.split('@')[0] || 'User'
-                              const avatar = v.profiles?.avatar_url
+                              const name = v.username || 'User'
+                              const avatar = v.avatar_url
                               return (
                                 <div key={`${v.user_id}-${opt.letter}`} className="flex items-center gap-3 p-2 rounded-xl hover:bg-white/5 transition-colors">
                                   <div className="w-9 h-9 rounded-full bg-gradient-to-br from-primary-600 to-accent-600 flex items-center justify-center overflow-hidden shrink-0">

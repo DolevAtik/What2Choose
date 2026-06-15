@@ -33,7 +33,7 @@ export default function ProfilePage() {
       const { data: userPosts } = await withTimeout(
         supabase
           .from('posts')
-          .select('*, profiles(username, avatar_url, email)')
+          .select('*, profiles(username, avatar_url)')
           .eq('author_id', user.id)
           .order('created_at', { ascending: false }),
         12000,
@@ -47,15 +47,12 @@ export default function ProfilePage() {
         const postIds = userPosts.map((p) => p.id)
         let totalVotes = 0
         if (postIds.length > 0) {
-          const { count } = await withTimeout(
-            supabase
-              .from('votes')
-              .select('*', { count: 'exact', head: true })
-              .in('post_id', postIds),
+          const { data: voteCounts } = await withTimeout(
+            supabase.rpc('get_post_vote_counts', { target_post_ids: postIds }),
             12000,
             'Loading vote stats timed out'
           )
-          totalVotes = count || 0
+          totalVotes = (voteCounts || []).reduce((sum, row) => sum + (Number(row.vote_count) || 0), 0)
         }
 
         // Followers / following counts & lists
@@ -109,8 +106,8 @@ export default function ProfilePage() {
 
       const file = event.target.files[0]
       const fileExt = file.name.split('.').pop()
-      const fileName = `${user.id}-${Math.random()}.${fileExt}`
-      const filePath = `${fileName}`
+      const unique = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`
+      const filePath = `${user.id}/${unique}.${fileExt}`
 
       const { error: uploadError } = await withTimeout(
         supabase.storage
