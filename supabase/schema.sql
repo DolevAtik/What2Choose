@@ -69,6 +69,12 @@ drop policy if exists "Public profiles are viewable" on public.profiles;
 create policy "Public profiles are viewable" on public.profiles
   for select using (true);
 
+-- Keep profile email private even though public profile rows are readable.
+revoke select on public.profiles from anon, authenticated;
+grant select (id, username, avatar_url, created_at) on public.profiles to anon, authenticated;
+grant insert (id, email, username, avatar_url) on public.profiles to authenticated;
+grant update (email, username, avatar_url) on public.profiles to authenticated;
+
 drop policy if exists "Users can update own profile" on public.profiles;
 create policy "Users can update own profile" on public.profiles
   for update using (auth.uid() = id);
@@ -90,14 +96,57 @@ drop policy if exists "Authors can delete own posts" on public.posts;
 create policy "Authors can delete own posts" on public.posts
   for delete using (auth.uid() = author_id);
 
--- Votes: public read, auth insert, no update
+-- Votes: public aggregate counts via RPC, row-level identities only for voters/authors.
 drop policy if exists "Votes are public" on public.votes;
-create policy "Votes are public" on public.votes
-  for select using (true);
+
+drop policy if exists "Users can read own votes" on public.votes;
+create policy "Users can read own votes" on public.votes
+  for select using (auth.uid() = user_id);
+
+drop policy if exists "Post authors can read votes on own posts" on public.votes;
+create policy "Post authors can read votes on own posts" on public.votes
+  for select using (
+    exists (
+      select 1 from public.posts p
+      where p.id = votes.post_id
+        and p.author_id = auth.uid()
+    )
+  );
 
 drop policy if exists "Auth users can vote" on public.votes;
 create policy "Auth users can vote" on public.votes
   for insert with check (auth.uid() = user_id);
+
+create or replace function public.get_vote_counts(post_uuid uuid)
+returns table(choice text, vote_count bigint)
+language sql
+security definer
+set search_path = public
+as $$
+  select v.choice, count(*)::bigint as vote_count
+  from public.votes v
+  where v.post_id = post_uuid
+  group by v.choice
+$$;
+
+grant execute on function public.get_vote_counts(uuid) to anon, authenticated;
+
+create or replace function public.get_post_voters(post_uuid uuid)
+returns table(choice text, user_id uuid, username text, avatar_url text)
+language sql
+security definer
+set search_path = public
+as $$
+  select v.choice, v.user_id, p.username, p.avatar_url
+  from public.votes v
+  join public.posts po on po.id = v.post_id
+  join public.profiles p on p.id = v.user_id
+  where v.post_id = post_uuid
+    and po.author_id = auth.uid()
+  order by v.created_at desc
+$$;
+
+grant execute on function public.get_post_voters(uuid) to authenticated;
 
 -- Comments: public read, auth insert, owner delete
 drop policy if exists "Comments are public" on public.comments;
@@ -152,7 +201,7 @@ drop policy if exists "Auth users can upload post-images" on storage.objects;
 create policy "Auth users can upload post-images" on storage.objects
   for insert with check (
     bucket_id = 'post-images' and
-    auth.uid() is not null
+    auth.uid()::text = (storage.foldername(name))[1]
   );
 
 drop policy if exists "Users can delete own post-images" on storage.objects;
