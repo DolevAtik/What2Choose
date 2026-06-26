@@ -39,7 +39,7 @@ export default function FeedPage() {
     try {
       let query = supabase
         .from('posts')
-        .select('*, profiles(username, avatar_url, email)')
+        .select('*, profiles(username, avatar_url)')
         .order('created_at', { ascending: false })
         .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)
 
