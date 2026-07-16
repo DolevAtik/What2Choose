@@ -280,6 +280,7 @@ export default function ChatPage() {
       loadMessages(selectedConv.id)
     } catch (err) {
       console.error('Send message error:', err)
+      setNewMsg(current => current || content)
       toast.error(err?.message ? `Error sending message: ${err.message}` : 'Error sending message')
     } finally {
       setSending(false)
