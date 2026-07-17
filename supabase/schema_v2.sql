@@ -41,6 +41,14 @@ create table if not exists public.notifications (
   created_at   timestamptz default now()
 );
 
+-- CREATE TABLE IF NOT EXISTS does not update constraints on existing databases.
+-- Keep this in sync with every notification type emitted by the triggers.
+alter table public.notifications
+  drop constraint if exists notifications_type_check;
+alter table public.notifications
+  add constraint notifications_type_check
+  check (type in ('vote', 'comment', 'follow', 'like'));
+
 alter table public.notifications enable row level security;
 
 drop policy if exists "Users can read own notifications" on public.notifications;
@@ -48,12 +56,15 @@ create policy "Users can read own notifications" on public.notifications
   for select using (auth.uid() = recipient_id);
 
 drop policy if exists "System can insert notifications" on public.notifications;
-create policy "System can insert notifications" on public.notifications
-  for insert with check (true);
+-- Notification rows are created by SECURITY DEFINER triggers below, not clients.
+revoke insert on public.notifications from anon, authenticated;
 
 drop policy if exists "Users can update own notifications" on public.notifications;
 create policy "Users can update own notifications" on public.notifications
   for update using (auth.uid() = recipient_id);
+
+revoke update on public.notifications from anon, authenticated;
+grant update (read) on public.notifications to authenticated;
 
 -- ============================================================
 -- TRIGGER: Create notification on vote (notify post author)
