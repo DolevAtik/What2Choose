@@ -64,6 +64,12 @@ grant execute on function public.get_post_voters(uuid) to authenticated;
 do $$
 begin
   if to_regclass('public.notifications') is not null then
+    alter table public.notifications
+      drop constraint if exists notifications_type_check;
+    alter table public.notifications
+      add constraint notifications_type_check
+      check (type in ('vote', 'comment', 'follow', 'like'));
+
     drop policy if exists "System can insert notifications" on public.notifications;
     revoke insert on public.notifications from anon, authenticated;
     revoke update on public.notifications from anon, authenticated;

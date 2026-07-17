@@ -41,6 +41,14 @@ create table if not exists public.notifications (
   created_at   timestamptz default now()
 );
 
+-- CREATE TABLE IF NOT EXISTS does not update constraints on existing databases.
+-- Keep this in sync with every notification type emitted by the triggers.
+alter table public.notifications
+  drop constraint if exists notifications_type_check;
+alter table public.notifications
+  add constraint notifications_type_check
+  check (type in ('vote', 'comment', 'follow', 'like'));
+
 alter table public.notifications enable row level security;
 
 drop policy if exists "Users can read own notifications" on public.notifications;

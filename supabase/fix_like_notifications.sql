@@ -14,6 +14,7 @@
 -- - it has post_id + actor_id
 -- - and a matching like exists for (post_id, actor_id)
 -- - and the timestamps are close (within 10 minutes) to avoid changing real vote notifications.
+-- - and the actor has not also voted on the post, since that row is ambiguous.
 
 UPDATE public.notifications n
 SET type = 'like'
@@ -26,5 +27,11 @@ WHERE n.type = 'vote'
     WHERE l.post_id = n.post_id
       AND l.user_id = n.actor_id
       AND abs(extract(epoch from (n.created_at - l.created_at))) <= 600
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM public.votes v
+    WHERE v.post_id = n.post_id
+      AND v.user_id = n.actor_id
   );
 
