@@ -11,8 +11,10 @@ import './index.css'
 if (typeof window !== 'undefined') {
   const reloadOnce = () => {
     const key = 'w2c-preload-reload'
-    if (sessionStorage.getItem(key)) return
-    sessionStorage.setItem(key, '1')
+    const cooldownMs = 10_000
+    const lastReload = Number(sessionStorage.getItem(key))
+    if (Number.isFinite(lastReload) && Date.now() - lastReload < cooldownMs) return
+    sessionStorage.setItem(key, String(Date.now()))
     window.location.reload()
   }
 
