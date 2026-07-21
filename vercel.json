@@ -13,6 +13,11 @@
       "headers": { "Cache-Control": "no-store" }
     },
     { "handle": "filesystem" },
+    {
+      "src": "/assets/(.*)",
+      "status": 404,
+      "headers": { "Cache-Control": "no-store" }
+    },
     { "src": "/(.*)", "dest": "/index.html" }
   ]
 }
