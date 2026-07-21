@@ -187,14 +187,19 @@ export default function DecisionCard({ post }) {
     setLiking(true)
     try {
       if (hasLiked) {
-        await supabase.from('likes').delete().eq('post_id', post.id).eq('user_id', user.id)
+        const { error } = await supabase.from('likes').delete().eq('post_id', post.id).eq('user_id', user.id)
+        if (error) throw error
         setHasLiked(false)
         setLikeCount(prev => Math.max(0, prev - 1))
       } else {
-        await supabase.from('likes').insert({ post_id: post.id, user_id: user.id })
+        const { error } = await supabase.from('likes').insert({ post_id: post.id, user_id: user.id })
+        if (error) throw error
         setHasLiked(true)
         setLikeCount(prev => prev + 1)
       }
+    } catch (err) {
+      console.error('Like toggle failed:', err)
+      toast.error(err?.message || 'Failed to update like')
     } finally {
       setLiking(false)
     }
