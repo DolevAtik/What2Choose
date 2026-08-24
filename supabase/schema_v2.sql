@@ -48,12 +48,15 @@ create policy "Users can read own notifications" on public.notifications
   for select using (auth.uid() = recipient_id);
 
 drop policy if exists "System can insert notifications" on public.notifications;
-create policy "System can insert notifications" on public.notifications
-  for insert with check (true);
+-- Notification rows are created by SECURITY DEFINER triggers below, not clients.
+revoke insert on public.notifications from anon, authenticated;
 
 drop policy if exists "Users can update own notifications" on public.notifications;
 create policy "Users can update own notifications" on public.notifications
   for update using (auth.uid() = recipient_id);
+
+revoke update on public.notifications from anon, authenticated;
+grant update (read) on public.notifications to authenticated;
 
 -- ============================================================
 -- TRIGGER: Create notification on vote (notify post author)
