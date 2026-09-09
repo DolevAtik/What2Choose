@@ -18,6 +18,14 @@ ALTER TABLE public.votes DROP CONSTRAINT IF EXISTS votes_choice_check;
 ALTER TABLE public.votes
   ADD CONSTRAINT votes_choice_check CHECK (choice IN ('A', 'B', 'C', 'D'));
 
+-- Existing databases keep the old notification check constraint when
+-- schema_v2.sql is rerun, so migrate it before the like trigger uses 'like'.
+ALTER TABLE public.notifications
+  DROP CONSTRAINT IF EXISTS notifications_type_check;
+ALTER TABLE public.notifications
+  ADD CONSTRAINT notifications_type_check
+  CHECK (type IN ('vote', 'comment', 'follow', 'like'));
+
 -- ============================================================
 -- TABLE: likes (post likes OR comment likes, never both)
 -- ============================================================
