@@ -7,6 +7,7 @@ import { withTimeout } from '../lib/withTimeout'
 import { useAuth } from '../hooks/useAuth'
 import { toast } from '../lib/toast'
 import { useLanguage } from '../contexts/LanguageContext'
+import { getOrCreateConversation } from '../lib/chat'
 
 export default function ChatPage() {
   const { userId: targetUserId } = useParams()
@@ -26,6 +27,8 @@ export default function ChatPage() {
   const [searching, setSearching] = useState(false)
   const messagesEndRef = useRef(null)
   const inputRef = useRef(null)
+  const messagesRequestRef = useRef(0)
+  const activeConversationRef = useRef(null)
 
   // Load conversations on mount
   useEffect(() => {
@@ -41,7 +44,9 @@ export default function ChatPage() {
 
   // Real-time messages subscription
   useEffect(() => {
+    activeConversationRef.current = selectedConv?.id || null
     if (!selectedConv) return
+    setMessages([])
     setLoadingMsgs(true)
     loadMessages(selectedConv.id)
 
@@ -55,15 +60,17 @@ export default function ChatPage() {
           table: 'messages',
           filter: `conversation_id=eq.${selectedConv.id}`,
         }, async (payload) => {
+          if (activeConversationRef.current !== payload.new.conversation_id) return
           if (payload.new.post_id) {
             const { data } = await supabase
               .from('messages')
               .select('*, post:posts(id, question, option_a_url, author:profiles!author_id(username))')
               .eq('id', payload.new.id)
               .single()
-            setMessages(prev => [...prev, data || payload.new])
+            if (activeConversationRef.current !== payload.new.conversation_id) return
+            appendMessage(data || payload.new)
           } else {
-            setMessages(prev => [...prev, payload.new])
+            appendMessage(payload.new)
           }
         })
         .subscribe()
@@ -73,6 +80,12 @@ export default function ChatPage() {
   }, [selectedConv?.id])
 
   const containerRef = useRef(null)
+
+  function appendMessage(message) {
+    setMessages(prev => (
+      prev.some(existing => existing.id === message.id) ? prev : [...prev, message]
+    ))
+  }
 
   // Scroll to bottom on new message
   useEffect(() => {
@@ -175,6 +188,7 @@ export default function ChatPage() {
   }
 
   async function loadMessages(convId) {
+    const requestId = ++messagesRequestRef.current
     try {
       const { data, error } = await withTimeout(
         supabase
@@ -190,54 +204,51 @@ export default function ChatPage() {
         console.error('Error loading messages:', error)
         throw error
       }
-      setMessages(data || [])
+      if (requestId === messagesRequestRef.current) {
+        setMessages(prev => {
+          const byId = new Map()
+          ;(data || []).forEach(message => byId.set(message.id, message))
+          prev.forEach(message => {
+            if (!byId.has(message.id)) byId.set(message.id, message)
+          })
+          return Array.from(byId.values()).sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+        })
+      }
     } catch (e) {
       console.error('loadMessages exception:', e)
     } finally {
-      setLoadingMsgs(false)
+      if (requestId === messagesRequestRef.current) {
+        setLoadingMsgs(false)
+      }
     }
   }
 
   async function openOrCreateConversation(otherUserId) {
     try {
-      const { data: existing } = await withTimeout(
-        supabase
-          .from('conversations')
-          .select('*')
-          .or(`and(user1_id.eq.${user.id},user2_id.eq.${otherUserId}),and(user1_id.eq.${otherUserId},user2_id.eq.${user.id})`)
-          .maybeSingle(),
+      const conversation = await withTimeout(
+        getOrCreateConversation(user.id, otherUserId, '*'),
         12000,
         'Opening conversation timed out'
       )
 
-      if (existing) {
-        const otherId = existing.user1_id === user.id ? existing.user2_id : existing.user1_id
+      if (conversation) {
+        const otherId = conversation.user1_id === user.id ? conversation.user2_id : conversation.user1_id
         const { data: otherProfile } = await withTimeout(
-          supabase.from('profiles').select('*').eq('id', otherId).single(),
+          supabase.from('profiles').select('id, username, avatar_url').eq('id', otherId).single(),
           12000,
           'Loading profile timed out'
         )
-        setSelectedConv({ ...existing, otherUser: otherProfile })
-      } else {
-        const { data: newConv } = await withTimeout(
-          supabase
-            .from('conversations')
-            .insert({ user1_id: user.id, user2_id: otherUserId })
-            .select()
-            .single(),
-          12000,
-          'Creating conversation timed out'
-        )
-        const { data: otherProfile } = await withTimeout(
-          supabase.from('profiles').select('*').eq('id', otherUserId).single(),
-          12000,
-          'Loading profile timed out'
-        )
-        if (newConv) {
-          const conv = { ...newConv, otherUser: otherProfile, messages: [] }
-          setConversations(prev => [conv, ...prev])
-          setSelectedConv(conv)
-        }
+        const conv = { ...conversation, otherUser: otherProfile, messages: [] }
+        setConversations(prev => {
+          if (prev.some(item => item.id === conversation.id)) return prev
+          return [conv, ...prev]
+        })
+        setSelectedConv(prev => {
+          if (prev?.id === conversation.id) {
+            return { ...prev, otherUser: otherProfile }
+          }
+          return conv
+        })
       }
       await loadConversations()
     } catch (e) {
