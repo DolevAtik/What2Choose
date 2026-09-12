@@ -22,7 +22,7 @@ export default function CommentSection({ postId, onCountChange }) {
     setLoading(true)
     const { data } = await supabase
       .from('comments')
-      .select('*, profiles(username, avatar_url, email)')
+      .select('*, profiles(username, avatar_url)')
       .eq('post_id', postId)
       .order('created_at', { ascending: true })
 
@@ -64,7 +64,7 @@ export default function CommentSection({ postId, onCountChange }) {
     const { data, error } = await supabase
       .from('comments')
       .insert({ post_id: postId, user_id: user.id, content: text.trim() })
-      .select('*, profiles(username, avatar_url, email)')
+      .select('*, profiles(username, avatar_url)')
       .single()
 
     if (!error && data) {
@@ -105,7 +105,7 @@ export default function CommentSection({ postId, onCountChange }) {
       ) : (
         <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
           {comments.map((c) => {
-            const name = c.profiles?.username || c.profiles?.email?.split('@')[0] || 'User'
+            const name = c.profiles?.username || 'User'
             const avatar = c.profiles?.avatar_url
             const commentLikes = likes[c.id] || { count: 0, hasLiked: false }
 
